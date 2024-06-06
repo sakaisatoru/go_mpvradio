@@ -1,0 +1,63 @@
+#EXTM3U
+
+#EXTINF:-1,Saitama / スマイルラジオ
+mms://hdv.nkansai.tv/smile
+
+#EXTINF:-1,USA / AFN TOKYO
+plugin:/afn.py/AFNP_TKO
+#EXTINF:-1,USA / AFN Gravity
+plugin:/afn.py/AFN_GRV
+#EXTINF:-1,USA / AFN Joe Radio(Pacific)
+plugin:/afn.py/AFN_JOEP
+#EXTINF:-1,USA / AFN Joe Radio
+plugin:/afn.py/AFN_JOE
+#EXTINF:-1,USA / AFN Hot AC(Pacific)
+plugin:/afn.py/AFN_HOTP
+#EXTINF:-1,USA / AFN Hot AC
+plugin:/afn.py/AFN_HOT
+#EXTINF:-1,USA / AFN Legacy
+plugin:/afn.py/AFN_LGYP
+#EXTINF:-1,USA / AFN Freedom
+plugin:/afn.py/AFN_FRE
+#EXTINF:-1,USA / AFN Freedom(Pacific)
+plugin:/afn.py/AFN_FREP
+
+#EXTINF:-1,radioparadise.com(main mix) / radioparadaise.com(main mix)
+http://stream.radioparadise.com/aac-320
+#EXTINF:-1,radioparadise.com(mellow mix) / radioparadaise.com(mellow mix)
+http://stream.radioparadise.com/mellow-320
+#EXTINF:-1,radioparadise.com(rock mix) / radioparadaise.com(rock mix)
+http://stream.radioparadise.com/rock-320
+#EXTINF:-1,radioparadise.com(global mix) / radioparadaise.com(global mix)
+http://stream.radioparadise.com/global-320
+
+#EXTINF:-1,Tokyo / TBSラジオ
+plugin:/radiko.py/TBS
+#EXTINF:-1,Tokyo / 文化放送
+plugin:/radiko.py/QRR
+#EXTINF:-1,Tokyo / ニッポン放送
+plugin:/radiko.py/LFR
+#EXTINF:-1,Tokyo / interfm
+plugin:/radiko.py/INT
+#EXTINF:-1,Tokyo / TOKYO FM
+plugin:/radiko.py/FMT
+#EXTINF:-1,Tokyo / J-WAVE
+plugin:/radiko.py/FMJ
+#EXTINF:-1,Tokyo / ラジオ日本
+plugin:/radiko.py/JORF
+#EXTINF:-1,Chiba / bayfm78
+plugin:/radiko.py/BAYFM78
+#EXTINF:-1,Saitama / NACK5
+plugin:/radiko.py/NACK5
+#EXTINF:-1,Kanagawa / ＦＭヨコハマ
+plugin:/radiko.py/YFM
+#EXTINF:-1,Ibaraki / LuckyFM 茨城放送
+plugin:/radiko.py/IBS
+#EXTINF:-1,Tokyo / NHKラジオ第1（東京）
+plugin:/radiko.py/JOAK
+#EXTINF:-1,Tokyo / ラジオNIKKEI第1
+plugin:/radiko.py/RN1
+#EXTINF:-1,Tokyo / ラジオNIKKEI第2
+plugin:/radiko.py/RN2
+#EXTINF:-1,Tokyo / NHK-FM（東京）
+plugin:/radiko.py/JOAK-FM
