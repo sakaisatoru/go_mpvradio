@@ -12,6 +12,7 @@ import (
     "os"
     "os/exec"
     "time"
+    "local.packages/netradio"
 )
 
 const (
@@ -65,20 +66,31 @@ func mpv_setvol(vol float64) {
 }
 
 func tune(url string) {
+	var (
+		station_url string
+		err error = nil
+	)
+	
 	args := strings.Split(url, "/")
 	if args[0] == "plugin:" {
-		cmd := exec.Command(PLUGINSDIR+args[1], args[2])
-		err := cmd.Run()
+		switch args[1] {
+			case "afn.py":
+				station_url, err = netradio.AFN_get_url_with_api(args[2])
+			case "radiko.py":
+				station_url, err = netradio.Radiko_get_url(args[2])
+			default:
+				break
+		}
 		if err != nil {
-			radio_enable = false
-		} else {
-			radio_enable = true
+			return 
 		}
 	} else {
-		s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", url)
-		mpv_send(s)
-		radio_enable = true
+		station_url = url
 	}
+
+	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
+	mpv_send(s)
+	radio_enable = true	
 }
 
 func radio_stop() {
@@ -271,14 +283,17 @@ func main() {
 	})
 
 	app.Connect("shutdown", func() {
-		//~ fmt.Println("shutdown")
+		fmt.Println("shutdown")
 		windows := app.GetWindows()
 		for windows != nil {
+				fmt.Println("try1")
 			d := windows.Data()
 			w, ok := d.(*gtk.Window)
 			if ok {
+				fmt.Println("try2")
 				if !w.InDestruction() {
 					// window size saving routine here.
+					fmt.Println("destory")
 					w.Destroy()
 				}
 			}
@@ -300,6 +315,9 @@ func main() {
 			if err != nil {
 				app.Quit()
 			} else {
+				w.Connect("destroy",func() {
+					fmt.Println("window destroy")
+				})
 				w.ShowAll()
 				w.Present()
 			}
