@@ -4,8 +4,11 @@ go 1.22.1
 
 replace local.packages/netradio => ./netradio
 
+replace local.packages/mpvctl => ./mpvctl
+
 require (
 	github.com/gotk3/gotk3 v0.6.3
+	local.packages/mpvctl v0.0.0-00010101000000-000000000000
 	local.packages/netradio v0.0.0-00010101000000-000000000000
 )
 

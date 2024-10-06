@@ -8,11 +8,9 @@ import (
     "bufio"
     "fmt"
     "unsafe"
-    "net"
     "os"
-    "os/exec"
-    "time"
     "local.packages/netradio"
+    "local.packages/mpvctl"
 )
 
 const (
@@ -21,49 +19,14 @@ const (
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
 	PLUGINSDIR		string = "/usr/local/share/mpvradio/plugins/"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
-	MPVOPTION1     	string = "--idle"
-	MPVOPTION2     	string = "--input-ipc-server="+MPV_SOCKET_PATH
-	MPVOPTION3     	string = "--no-video"
-	MPVOPTION4     	string = "--no-cache"
-	MPVOPTION5     	string = "--stream-buffer-size=256KiB"
-	MPVOPTION6	   	string = "--script=/home/pi/bin/title_trigger.lua"
-	mpvIRCbuffsize 	int = 1024
 )
 
 var (
 	child_selected_change bool = false
-	mpv	net.Conn
 	stlist map[string]string = make(map[string]string)	
 	radio_enable bool
-	readbuf = make([]byte, mpvIRCbuffsize)
-	mpvprocess *exec.Cmd
 	volume int8
 )
-
-func mpv_send(s string) {
-	mpv.Write([]byte(s))
-	for {
-		n, err := mpv.Read(readbuf)
-		if err != nil {
-			log.Println(err)
-		}
-		//~ fmt.Println(string(readbuf[:n]))
-		if n < mpvIRCbuffsize {
-			break
-		}
-	}
-}
-
-func mpv_setvol(vol float64) {
-	if vol < 1 {
-		vol = 0
-	} else if vol >= 100 {
-		vol = 99
-	} 
-	//~ fmt.Println("volume:",vol)
-	s := fmt.Sprintf("{\"command\": [\"set_property\",\"volume\",%d]}\x0a", int(vol))
-	mpv_send(s)
-}
 
 func tune(url string) {
 	var (
@@ -89,14 +52,10 @@ func tune(url string) {
 	}
 
 	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
-	mpv_send(s)
+	mpvctl.Send(s)
 	radio_enable = true	
 }
 
-func radio_stop() {
-	mpv_send("{\"command\": [\"stop\"]}\x0a")
-	radio_enable = false
-}
 
 func setup_station_list () {
 	file, err := os.Open(stationlist)
@@ -195,16 +154,16 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			return win, err
 		}
 		volbtn.Connect("value-changed", func(volbtn *gtk.VolumeButton, v float64) {
-			mpv_setvol(v*100)
+			mpvctl.Setvol(int8(v*float64(mpvctl.Volume_steps)))
 		})
-		volbtn.SetValue(50)
+		volbtn.SetValue(0.25)
 		// ストップボタン
 		stopbtn, err := gtk.ButtonNewFromIconName("media-playback-stop-symbolic",
 													gtk.ICON_SIZE_BUTTON);
 		if err != nil {
 			return win, err
 		}
-		stopbtn.Connect("clicked", radio_stop)
+		stopbtn.Connect("clicked", func() {mpvctl.Stop(); radio_enable = false})
 		
 		header,err := gtk.HeaderBarNew()
 		if err == nil {
@@ -253,37 +212,27 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 }
 
 func main() {
+	if err := mpvctl.Init(MPV_SOCKET_PATH);err != nil {
+		log.Fatal(err)
+	}
+	
 	app, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
 		log.Fatal("Could not create application.", err)
 	}
 	
 	app.Connect("startup", func() {
-		//~ fmt.Println("startup")
-		mpvprocess = exec.Command("/usr/bin/mpv", 	MPVOPTION1, MPVOPTION2, 
-													MPVOPTION3, MPVOPTION4, 
-													MPVOPTION5)
-													//~ MPVOPTION5, MPVOPTION6)
-		mpvprocess.Start()
 		setup_station_list()
-		var err error
-		for i := 0; ;i++ {
-			mpv, err = net.Dial("unix", MPV_SOCKET_PATH);
-			if err == nil {
-				break
-			}
-			time.Sleep(200*time.Millisecond)
-			if i > 60 {
-				fmt.Println("time out.", err)	// time out
-				app.Quit()
-			}
+		if err := mpvctl.Open(MPV_SOCKET_PATH);err != nil {
+			fmt.Println("time out.", err)	// time out
+			app.Quit()
 		}
 		radio_enable = false
 		volume = 60
+		fmt.Println("Start up.");
 	})
 
 	app.Connect("shutdown", func() {
-		fmt.Println("shutdown")
 		windows := app.GetWindows()
 		for windows != nil {
 				fmt.Println("try1")
@@ -299,12 +248,13 @@ func main() {
 			}
 			windows = windows.Next()
 		}
-		mpv.Close()
-		mpvprocess.Process.Kill()
+		mpvctl.Close()
+		mpvctl.Mpvkill()
 		err := os.Remove(MPV_SOCKET_PATH)
         if err != nil {
 			fmt.Println(err)
 		}
+		fmt.Println("shutdown.")
 	})
 
 	app.Connect("activate", func() {
@@ -328,6 +278,7 @@ func main() {
 				w.Present()
 			}
 		}
+		fmt.Println("activate.");
 	})
 	app.Run(os.Args)
 }
