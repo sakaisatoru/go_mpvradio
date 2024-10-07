@@ -97,9 +97,8 @@ func Send(s string) error {
 	return err
 }
 
-
-
-func Recv(ch chan<- string, cb func(MpvIRC) (string, bool)) {
+//~ func Recv(ch chan<- string, cb func(MpvIRC) (string, bool)) {
+func Recv(cb func(MpvIRC) (string, bool)) {
 	var ms MpvIRC
 	
 	for {
@@ -111,10 +110,11 @@ func Recv(ch chan<- string, cb func(MpvIRC) (string, bool)) {
 						ms.clear() // 中身を消さないとフィールド単位で持ち越される場合がある
 						err := json.Unmarshal([]byte(s),&ms)
 						if err == nil {
-							s, ok := cb(ms)
-							if ok  {
-								ch <- s
-							}
+							cb(ms)
+							//~ s, ok := cb(ms)
+							//~ if ok  {
+								//~ ch <- s
+							//~ }
 						}
 					}
 				}

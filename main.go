@@ -9,6 +9,8 @@ import (
     "fmt"
     "unsafe"
     "os"
+    //~ "time"
+    "slices"
     "local.packages/netradio"
     "local.packages/mpvctl"
 )
@@ -26,7 +28,24 @@ var (
 	stlist map[string]string = make(map[string]string)	
 	radio_enable bool
 	volume int8
+	mpvmessagebuffer *gtk.EntryBuffer
+	mpvret = make(chan string)
 )
+
+// mpvからの応答を選別するフィルタ
+func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
+	//~ fmt.Printf("%#v\n",ms)
+	if radio_enable {
+		if ms.Event == "property-change" {
+			if ms.Name == "metadata/by-key/icy-title" {
+				fmt.Println(ms.Data)
+				mpvmessagebuffer.SetText(ms.Data)
+				return ms.Data, true
+			}
+		}
+	}
+	return "", false
+}
 
 func tune(url string) {
 	var (
@@ -56,7 +75,6 @@ func tune(url string) {
 	radio_enable = true	
 }
 
-
 func setup_station_list () {
 	file, err := os.Open(stationlist)
 	if err != nil {
@@ -85,7 +103,6 @@ func setup_station_list () {
 	}
 }
 
-
 func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
 	if child_selected_change {
 		child_selected_change = false
@@ -99,9 +116,7 @@ func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
 					a, err := p.GetName()
 					if err == nil {
 						if a == "GtkLabel" {
-							l := (*gtk.Label)(unsafe.Pointer(p))
-							n := l.GetLabel()
-							u, _ := stlist[n]
+							u, _ := stlist[(*gtk.Label)(unsafe.Pointer(p)).GetLabel()]
 							tune(u)
 						} else {
 							fmt.Println("need GtkLabel, but ", a)
@@ -113,9 +128,7 @@ func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
 			}
 			current = current.Next()
 		}
-		list.FreeFull(func(item interface{}) {
-			v := item.(*gtk.Widget)
-			v.Unref()})
+		list.Free()
 	}
 } 
 
@@ -133,7 +146,13 @@ func radiopanel_new () (*gtk.FlowBox, error) {
 		grid.Connect ("selected-children-changed", func() {
 									child_selected_change = true})
 		// playlist_table をチェックして選局ボタンを並べる
+		var keys []string
 		for k, _ := range stlist {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		
+		for _,k := range keys {
 			label, err := gtk.LabelNew(k)
 			if err == nil {
 				grid.Insert(label,-1)
@@ -142,7 +161,6 @@ func radiopanel_new () (*gtk.FlowBox, error) {
 	}
     return grid, nil;
 }
-
 
 func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 	// build gui 
@@ -192,10 +210,17 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 		scroll.Add(fbox)
 
+		mpvmessagebuffer,_ = gtk.EntryBufferNew("",-1)
+		mpvmessage,err := gtk.EntryNewWithBuffer(mpvmessagebuffer)
+		if err != nil {
+			return win, err
+		}
+
 		box,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
 		if err != nil {
 			return win, err
 		}
+		box.PackStart(mpvmessage, false, false, 0)
 		box.PackStart(scroll, true, true, 0)
 
 		win.Add(box)
@@ -230,6 +255,7 @@ func main() {
 		radio_enable = false
 		volume = 60
 		fmt.Println("Start up.");
+		go mpvctl.Recv(cb_mpvrecv)
 	})
 
 	app.Connect("shutdown", func() {
@@ -268,6 +294,8 @@ func main() {
 				w.Connect("destroy",func() {
 					fmt.Println("window destroy")
 				})
+				s := "{ \"command\": [\"observe_property_string\", 1, \"metadata/by-key/icy-title\"] }"
+				mpvctl.Send(s)
 				w.ShowAll()
 				w.Present()
 			}
@@ -280,5 +308,6 @@ func main() {
 		}
 		fmt.Println("activate.");
 	})
+
 	app.Run(os.Args)
 }
