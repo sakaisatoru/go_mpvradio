@@ -2,6 +2,7 @@ package main
 
 import (
     "github.com/gotk3/gotk3/gtk"
+    "github.com/gotk3/gotk3/gdk"
     "github.com/gotk3/gotk3/glib"
     "log"
     "strings"
@@ -9,6 +10,7 @@ import (
     "fmt"
     "unsafe"
     "os"
+    "errors"
     //~ "time"
     "slices"
     "local.packages/netradio"
@@ -19,8 +21,9 @@ const (
 	PACKAGE			string = "go_mpvradio"
 	appID 			string = "com.google.endeavor2wako.go_mpvradio"
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
-	PLUGINSDIR		string = "/usr/local/share/mpvradio/plugins/"
+	//~ PLUGINSDIR		string = "/usr/local/share/mpvradio/plugins/"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
+	ICON_DIR_PATH	string = "/home/sakai/.cache/mpvradio/logo/%s.png"
 )
 
 var (
@@ -98,9 +101,29 @@ func setup_station_list () {
 			if len(s) != 0 {
 				f = false
 				stlist[name] = s
+			//~ fmt.Printf("station name : %s  data : %s\n", name,s)
 			}
 		}
 	}
+}
+
+func foreach_children(container *gtk.Container, name string) (*gtk.Widget, error) {
+	list := container.GetChildren()
+	current := list
+	for current != nil {
+		p, ok := current.Data().(*gtk.Widget)
+		if ok {
+			a, err := p.GetName()
+			if err == nil {
+				if a == name {
+					return p, nil
+				}
+			}
+		}
+		current = current.Next()
+	}
+	list.Free()
+	return nil, errors.New("undefined")
 }
 
 func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
@@ -115,9 +138,12 @@ func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
 				if ok {
 					a, err := p.GetName()
 					if err == nil {
-						if a == "GtkLabel" {
-							u, _ := stlist[(*gtk.Label)(unsafe.Pointer(p)).GetLabel()]
-							tune(u)
+						if a == "GtkBox" {
+							wp, err := foreach_children((*gtk.Container)(unsafe.Pointer(p)), "GtkLabel")
+							if err == nil {
+								u, _ := stlist[(*gtk.Label)(unsafe.Pointer(wp)).GetLabel()]
+								tune(u)
+							}
 						} else {
 							fmt.Println("need GtkLabel, but ", a)
 						}
@@ -151,11 +177,31 @@ func radiopanel_new () (*gtk.FlowBox, error) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		
+
 		for _,k := range keys {
 			label, err := gtk.LabelNew(k)
 			if err == nil {
-				grid.Insert(label,-1)
+				box,_ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
+				icon_f := fmt.Sprintf(ICON_DIR_PATH, k)
+				_, width, height, err := gdk.PixbufGetFileInfo(icon_f)
+				if err == nil {
+					if width > 200 {width = 200}
+					if height > 64 {height = 64}
+				}
+				var icon *gtk.Image
+				var er error
+				pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
+				if err != nil {
+					icon, _ = gtk.ImageNewFromIconName("image-missing", gtk.ICON_SIZE_DIALOG)
+				} else {
+					icon, er = gtk.ImageNewFromPixbuf(pbuf)
+					if er != nil {
+						icon, _ = gtk.ImageNewFromIconName("image-missing", gtk.ICON_SIZE_DIALOG)
+					}
+				}
+				box.PackStart(icon,false,false,2)
+				box.PackStart(label,false,false,2)
+				grid.Insert(box,-1)
 			}
 		}
 	}
@@ -215,6 +261,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err != nil {
 			return win, err
 		}
+		mpvmessage.SetCanFocus(false)
 
 		box,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
 		if err != nil {
