@@ -129,7 +129,7 @@ func Setvol(vol int8) {
 	} else if vol > Volume_max {
 		vol = Volume_max
 	} 
-	fmt.Printf("vol=%d\n",vol)
+	//~ fmt.Printf("vol=%d\n",vol)
 	s := fmt.Sprintf("{\"command\": [\"set_property\",\"volume\",%d]}\x0a",volconv[vol])
 	Send(s)
 }

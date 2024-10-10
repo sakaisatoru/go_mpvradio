@@ -4,13 +4,14 @@ import (
     "github.com/gotk3/gotk3/gtk"
     "github.com/gotk3/gotk3/gdk"
     "github.com/gotk3/gotk3/glib"
+    "github.com/adrg/xdg"
     "log"
     "strings"
     "bufio"
     "fmt"
     "unsafe"
     "os"
-    "errors"
+    "path/filepath"
     //~ "time"
     "slices"
     "local.packages/netradio"
@@ -21,9 +22,8 @@ const (
 	PACKAGE			string = "go_mpvradio"
 	appID 			string = "com.google.endeavor2wako.go_mpvradio"
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
-	//~ PLUGINSDIR		string = "/usr/local/share/mpvradio/plugins/"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
-	ICON_DIR_PATH	string = "/home/sakai/.cache/mpvradio/logo/%s.png"
+	ICON_DIR_PATH	string = "mpvradio/logo"
 )
 
 var (
@@ -41,7 +41,7 @@ func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 	if radio_enable {
 		if ms.Event == "property-change" {
 			if ms.Name == "metadata/by-key/icy-title" {
-				fmt.Println(ms.Data)
+				//~ fmt.Println(ms.Data)
 				mpvmessagebuffer.SetText(ms.Data)
 				return ms.Data, true
 			}
@@ -107,56 +107,42 @@ func setup_station_list () {
 	}
 }
 
-func foreach_children(container *gtk.Container, name string) (*gtk.Widget, error) {
+func cb_isbox(wi *gtk.Widget) {
+	a, err := wi.GetName()
+	if err == nil {
+		if a == "GtkBox" {
+			container_foreach((*gtk.Container)(unsafe.Pointer(wi)), func(w2 *gtk.Widget) {
+				p, err := w2.GetName()
+				if err == nil {
+					if p == "GtkLabel" {
+						u, _ := stlist[(*gtk.Label)(unsafe.Pointer(w2)).GetLabel()]
+						tune(u)
+					}
+				}
+			})
+		}
+	}
+}
+
+func container_foreach(container *gtk.Container, cb func(wi *gtk.Widget) ) {
+	//~ fmt.Printf("container_foreach\n")
 	list := container.GetChildren()
 	current := list
 	for current != nil {
 		p, ok := current.Data().(*gtk.Widget)
 		if ok {
-			a, err := p.GetName()
-			if err == nil {
-				if a == name {
-					return p, nil
-				}
-			}
+			cb(p)
 		}
 		current = current.Next()
 	}
 	list.Free()
-	return nil, errors.New("undefined")
 }
 
 func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
 	if child_selected_change {
-		child_selected_change = false
-		list := child.GetChildren()
-		current := list
-		for current != nil {
-			data := current.Data()
-			if data != nil {
-				p, ok := data.(*gtk.Widget)
-				if ok {
-					a, err := p.GetName()
-					if err == nil {
-						if a == "GtkBox" {
-							wp, err := foreach_children((*gtk.Container)(unsafe.Pointer(p)), "GtkLabel")
-							if err == nil {
-								u, _ := stlist[(*gtk.Label)(unsafe.Pointer(wp)).GetLabel()]
-								tune(u)
-							}
-						} else {
-							fmt.Println("need GtkLabel, but ", a)
-						}
-					} else {
-						fmt.Println(err)
-					}
-				}
-			}
-			current = current.Next()
-		}
-		list.Free()
+		container_foreach((*gtk.Container)(unsafe.Pointer(child)), cb_isbox)
 	}
-} 
+}
 
 func radiopanel_new () (*gtk.FlowBox, error) {
     grid, err := gtk.FlowBoxNew()
@@ -182,7 +168,7 @@ func radiopanel_new () (*gtk.FlowBox, error) {
 			label, err := gtk.LabelNew(k)
 			if err == nil {
 				box,_ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
-				icon_f := fmt.Sprintf(ICON_DIR_PATH, k)
+				icon_f := fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, k))
 				_, width, height, err := gdk.PixbufGetFileInfo(icon_f)
 				if err == nil {
 					if width > 200 {width = 200}
@@ -192,11 +178,11 @@ func radiopanel_new () (*gtk.FlowBox, error) {
 				var er error
 				pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
 				if err != nil {
-					icon, _ = gtk.ImageNewFromIconName("image-missing", gtk.ICON_SIZE_DIALOG)
+					icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
 				} else {
 					icon, er = gtk.ImageNewFromPixbuf(pbuf)
 					if er != nil {
-						icon, _ = gtk.ImageNewFromIconName("image-missing", gtk.ICON_SIZE_DIALOG)
+						icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
 					}
 				}
 				box.PackStart(icon,false,false,2)
@@ -273,12 +259,6 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
 		
-		// オプション
-		// 上下カーソルキーに音量調整を割り当てる
-		//~ if (g_key_file_get_boolean (kconf, "mode", "allowkey_volume", NULL)) {
-			//~ g_signal_connect (G_OBJECT(window), "key-press-event",
-						//~ G_CALLBACK(mainwindow_key_press_event_cb), NULL);
-		//~ }
 	}
 	return win, err
 }
