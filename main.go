@@ -12,7 +12,6 @@ import (
     "unsafe"
     "os"
     "path/filepath"
-    //~ "time"
     "slices"
     "local.packages/netradio"
     "local.packages/mpvctl"
@@ -20,11 +19,20 @@ import (
 
 const (
 	PACKAGE			string = "go_mpvradio"
+	PACKAGE_VERSION	string = "0.1.0"
 	appID 			string = "com.google.endeavor2wako.go_mpvradio"
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
 	ICON_DIR_PATH	string = "mpvradio/logo"
 )
+
+type actionEntry struct {
+	name string
+	activate func(action *glib.SimpleAction)
+	parameter_type string
+	state string
+	change_state func(action *glib.SimpleAction) 
+}
 
 var (
 	child_selected_change bool = false
@@ -34,6 +42,29 @@ var (
 	mpvmessagebuffer *gtk.EntryBuffer
 	mpvret = make(chan string)
 )
+
+func about_activated(action *glib.SimpleAction) {
+	dialog, err := gtk.AboutDialogNew()
+	if err == nil {
+		logofile,err := xdg.SearchDataFile("pixmaps/mpvradio.png")
+		if err == nil {
+			buf,err := gdk.PixbufNewFromFile (logofile);
+			if err == nil {
+				dialog.SetLogo(buf)
+				buf.Unref()
+			}
+		}
+		dialog.SetCopyright("endeavor wako 2024")
+		dialog.SetAuthors([]string{"endeavor wako","sakai satoru"})
+		dialog.SetProgramName(PACKAGE)
+		dialog.SetTranslatorCredits("endeavor wako (japanese)")
+		dialog.SetLicenseType(gtk.LICENSE_LGPL_2_1)
+		dialog.SetVersion(PACKAGE_VERSION)
+		dialog.Response(gtk.RESPONSE_CLOSE)
+		dialog.Run()
+	}
+}
+
 
 // mpvからの応答を選別するフィルタ
 func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
@@ -124,8 +155,56 @@ func cb_isbox(wi *gtk.Widget) {
 	}
 }
 
+/*
+ * gotk3 にラッパーがないので go で書いた g_action_map_add_action_entries()
+ * https://github.com/GNOME/glib/blob/main/gio/gactionmap.c
+ * 
+ * goのコールバックは引数を取らないので、parameterは扱えない。
+ */
+func action_map_add_action_entries (app *gtk.Application, entries []actionEntry) {
+	var(
+		action *glib.SimpleAction
+		parameter_type *glib.VariantType
+		state *glib.Variant
+	)
+
+	for i := 0; i < len(entries); i++ {
+		if entries[i].parameter_type != "" {
+			if glib.VariantTypeStringIsValid(entries[i].parameter_type) {
+				fmt.Printf(`"critical: g_action_map_add_entries: the type "
+                          "string '%s' given as the parameter type for "
+                          "action '%s' is not a valid GVariant type "
+                          "string.  This action will not be added."`,
+                          entries[i].parameter_type, entries[i].name)
+			}
+			parameter_type = nil
+		}
+		
+		if entries[i].state != "" {
+			parameter_type = glib.VARIANT_TYPE_STRING
+			state = glib.VariantFromString(entries[i].state)
+			action = glib.SimpleActionNewStateful(entries[i].name, parameter_type, state)
+		} else {
+			fmt.Println("make stateless action")
+			parameter_type = nil
+			action = glib.SimpleActionNew(entries[i].name, parameter_type)
+		}
+		
+		if entries[i].activate != nil {
+			action.Connect("activate", entries[i].activate)
+		}
+		
+		if entries[i].change_state != nil {
+			action.Connect("change-state", entries[i].change_state)
+		}
+		app.AddAction(action)
+	}
+}
+
+/*
+ * gotk3 にラッパーが無いので go で書いた gtk_container_foreach ()
+ */
 func container_foreach(container *gtk.Container, cb func(wi *gtk.Widget) ) {
-	//~ fmt.Printf("container_foreach\n")
 	list := container.GetChildren()
 	current := list
 	for current != nil {
@@ -258,7 +337,6 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
-		
 	}
 	return win, err
 }
@@ -281,55 +359,94 @@ func main() {
 		}
 		radio_enable = false
 		volume = 60
-		fmt.Println("Start up.");
 		go mpvctl.Recv(cb_mpvrecv)
+		
+		//~ <section>
+		  //~ <item>
+			//~ <attribute name="label" translatable="yes">QuickTune</attribute>
+			//~ <attribute name="action">app.quicktune</attribute>
+		  //~ </item>
+		  //~ <item>
+			//~ <attribute name="label" translatable="yes">StatusIcon</attribute>
+			//~ <attribute name="action">app.statusicon</attribute>
+		  //~ </item>
+		//~ </section>
+
+		builder,err := gtk.BuilderNewFromString (`<interface>
+		<!-- interface-requires gtk+ 3.0 -->
+		<menu id="appmenu">
+		<section>
+		  <item>
+			<attribute name="label" translatable="yes">_about</attribute>
+			<attribute name="action">app.about</attribute>
+		  </item>
+		  <item>
+			<attribute name="label" translatable="yes">_Quit</attribute>
+			<attribute name="action">app.quit</attribute>
+		  </item>
+		</section>
+		</menu>
+		</interface>`)
+		if err != nil {
+			fmt.Printf("%s\n", err)
+			return
+		} 
+		app_entries := []actionEntry{
+				{"about", about_activated, "", "", nil},
+				{"quit", func(action *glib.SimpleAction) {app.Quit()}, "", "", nil},
+			}
+		action_map_add_action_entries (app, app_entries)
+		app.SetAccelsForAction("app.quit", []string{"<Ctrl>Q"})
+		app_menu,err := builder.GetObject("appmenu")
+		if err != nil {
+			fmt.Printf("%s\n", err)
+			return
+		} 
+		if m,ok := app_menu.(*glib.MenuModel);ok {
+			app.SetAppMenu(m)
+		}
+		fmt.Println("Start up.");
 	})
 
 	app.Connect("shutdown", func() {
-		windows := app.GetWindows()
-		for windows != nil {
-				fmt.Println("try1")
-			d := windows.Data()
-			w, ok := d.(*gtk.Window)
-			if ok {
-				fmt.Println("try2")
-				if !w.InDestruction() {
-					// window size saving routine here.
-					fmt.Println("destory")
-					w.Destroy()
-				}
-			}
-			windows = windows.Next()
-		}
 		mpvctl.Close()
 		mpvctl.Mpvkill()
 		err := os.Remove(MPV_SOCKET_PATH)
         if err != nil {
 			fmt.Println(err)
 		}
+
+		windows := app.GetWindows()
+		if windows != nil {
+			windows.Foreach( func(e interface{}) {
+				if w,ok := e.(*gtk.Window);ok {
+					if w.InDestruction() == false {
+						fmt.Println("try destroy window")
+						w.Destroy()
+					}
+				}
+			})
+		}
 		fmt.Println("shutdown.")
 	})
 
 	app.Connect("activate", func() {
-		//~ fmt.Println("activate")
 		windows := app.GetWindows()
 		if windows == nil {
 			w, err := mpvradio_window_new(app)
 			if err != nil {
 				app.Quit()
-			} else {
-				w.Connect("destroy",func() {
-					fmt.Println("window destroy")
-				})
-				s := "{ \"command\": [\"observe_property_string\", 1, \"metadata/by-key/icy-title\"] }"
-				mpvctl.Send(s)
-				w.ShowAll()
-				w.Present()
-			}
+			} 
+			w.Connect("destroy",func() {
+				fmt.Println("destroy now.")
+			})
+			s := "{ \"command\": [\"observe_property_string\", 1, \"metadata/by-key/icy-title\"] }"
+			mpvctl.Send(s)
+			w.ShowAll()
+			w.Present()
 		} else {
 			d := windows.Data()
-			w, ok := d.(*gtk.Window)
-			if ok {
+			if w, ok := d.(*gtk.Window); ok {
 				w.Present()
 			}
 		}
