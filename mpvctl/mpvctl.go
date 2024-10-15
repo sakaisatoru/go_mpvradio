@@ -55,7 +55,7 @@ var (
 	Volume_min int8 = 0
 	Volume_max int8 = int8(Volume_steps - 1)
 	readbuf = make([]byte, IRCbuffsize)
-	Cb_connect_stop = func() bool { return false } 
+	Cb_connect_stop = func() bool { return false }
 )
 
 func Init(socketpath string) error {

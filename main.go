@@ -11,6 +11,7 @@ import (
     "fmt"
     "unsafe"
     "os"
+    "sync"
     "path/filepath"
     "slices"
     "local.packages/netradio"
@@ -24,6 +25,7 @@ const (
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
 	ICON_DIR_PATH	string = "mpvradio/logo"
+	APP_ICON		string = "pixmaps/mpvradio.png"
 )
 
 type actionEntry struct {
@@ -41,17 +43,14 @@ var (
 	volume int8
 	mpvmessagebuffer *gtk.EntryBuffer
 	mpvret = make(chan string)
+	mu sync.Mutex
 )
 
 func about_activated(action *glib.SimpleAction) {
-	dialog, err := gtk.AboutDialogNew()
-	if err == nil {
-		logofile,err := xdg.SearchDataFile("pixmaps/mpvradio.png")
-		if err == nil {
-			buf,err := gdk.PixbufNewFromFile (logofile);
-			if err == nil {
+	if dialog, err := gtk.AboutDialogNew();err == nil {
+		if logofile,err := xdg.SearchDataFile(APP_ICON);err == nil {
+			if buf,err := gdk.PixbufNewFromFile(logofile);err == nil {
 				dialog.SetLogo(buf)
-				buf.Unref()
 			}
 		}
 		dialog.SetCopyright("endeavor wako 2024")
@@ -60,19 +59,20 @@ func about_activated(action *glib.SimpleAction) {
 		dialog.SetTranslatorCredits("endeavor wako (japanese)")
 		dialog.SetLicenseType(gtk.LICENSE_LGPL_2_1)
 		dialog.SetVersion(PACKAGE_VERSION)
-		dialog.Response(gtk.RESPONSE_CLOSE)
-		dialog.Run()
+		result := dialog.Run()
+		if result == gtk.RESPONSE_DELETE_EVENT {
+			dialog.Destroy()
+		}
 	}
 }
 
-
 // mpvからの応答を選別するフィルタ
 func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
-	//~ fmt.Printf("%#v\n",ms)
+	mu.Lock()
+	defer mu.Unlock()
 	if radio_enable {
 		if ms.Event == "property-change" {
 			if ms.Name == "metadata/by-key/icy-title" {
-				//~ fmt.Println(ms.Data)
 				mpvmessagebuffer.SetText(ms.Data)
 				return ms.Data, true
 			}
@@ -146,7 +146,9 @@ func cb_isbox(wi *gtk.Widget) {
 				p, err := w2.GetName()
 				if err == nil {
 					if p == "GtkLabel" {
-						u, _ := stlist[(*gtk.Label)(unsafe.Pointer(w2)).GetLabel()]
+						st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
+						mpvmessagebuffer.SetText(st)
+						u, _ := stlist[st]
 						tune(u)
 					}
 				}
@@ -421,7 +423,6 @@ func main() {
 			windows.Foreach( func(e interface{}) {
 				if w,ok := e.(*gtk.Window);ok {
 					if w.InDestruction() == false {
-						fmt.Println("try destroy window")
 						w.Destroy()
 					}
 				}
