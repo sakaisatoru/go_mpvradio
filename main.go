@@ -36,9 +36,13 @@ type actionEntry struct {
 	change_state func(action *glib.SimpleAction) 
 }
 
+type radioPanel struct {
+	grid *gtk.FlowBox
+	store map[string]string
+	child_selected_change bool
+}
+
 var (
-	child_selected_change bool = false
-	stlist map[string]string = make(map[string]string)	
 	radio_enable bool
 	volume int8
 	mpvmessagebuffer *gtk.EntryBuffer
@@ -109,54 +113,6 @@ func tune(url string) {
 	radio_enable = true	
 }
 
-func setup_station_list () {
-	file, err := os.Open(stationlist)
-	if err != nil {
-		log.Fatal(err)
-	} 
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	f := false
-	s := ""
-	name := ""
-	for scanner.Scan() {
-		s = scanner.Text()
-		if strings.Contains(s, "#EXTINF:") == true {
-			f = true
-			_, name, _ = strings.Cut(s, "/")
-			name = strings.Trim(name, " ")
-			continue
-		}
-		if f {
-			if len(s) != 0 {
-				f = false
-				stlist[name] = s
-			//~ fmt.Printf("station name : %s  data : %s\n", name,s)
-			}
-		}
-	}
-}
-
-func cb_isbox(wi *gtk.Widget) {
-	a, err := wi.GetName()
-	if err == nil {
-		if a == "GtkBox" {
-			container_foreach((*gtk.Container)(unsafe.Pointer(wi)), func(w2 *gtk.Widget) {
-				p, err := w2.GetName()
-				if err == nil {
-					if p == "GtkLabel" {
-						st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
-						mpvmessagebuffer.SetText(st)
-						u, _ := stlist[st]
-						tune(u)
-					}
-				}
-			})
-		}
-	}
-}
-
 /*
  * gotk3 にラッパーがないので go で書いた g_action_map_add_action_entries()
  * https://github.com/GNOME/glib/blob/main/gio/gactionmap.c
@@ -219,60 +175,116 @@ func container_foreach(container *gtk.Container, cb func(wi *gtk.Widget) ) {
 	list.Free()
 }
 
-func child_activate_cb (box *gtk.FlowBox, child *gtk.FlowBoxChild) {
-	if child_selected_change {
-		container_foreach((*gtk.Container)(unsafe.Pointer(child)), cb_isbox)
+//~ func radiopanel_new (stl map[string]string) (*gtk.FlowBox, error) {
+func radiopanel_new(playlistfile string) (*radioPanel, error) {
+    panel := new(radioPanel)
+    panel.store = make(map[string]string)
+    panel.child_selected_change = false
+
+    err := panel.readPlayList(playlistfile)
+    if err != nil {
+		return panel, err
 	}
+    panel.grid, err = gtk.FlowBoxNew()
+    if err != nil {
+		return panel, err
+	}
+	panel.grid.SetSelectionMode(gtk.SELECTION_SINGLE)
+	panel.grid.SetHomogeneous(true)
+	panel.grid.SetActivateOnSingleClick(true)
+	panel.grid.SetColumnSpacing(2)
+	panel.grid.SetMaxChildrenPerLine(6)
+	// ラベルにてボタンクリックと等価の動作を行うための準備
+	panel.grid.Connect ("child-activated", 
+		func(box *gtk.FlowBox, child *gtk.FlowBoxChild) {
+			if panel.child_selected_change {
+				panel.child_selected_change = false
+				container_foreach((*gtk.Container)(unsafe.Pointer(child)), 
+					func(wi *gtk.Widget) {
+						a, err := wi.GetName()
+						if err == nil && a == "GtkBox" {
+							container_foreach((*gtk.Container)(unsafe.Pointer(wi)), 
+								func(w2 *gtk.Widget) {
+									p, err := w2.GetName()
+									if err == nil && p == "GtkLabel" {
+										st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
+										mpvmessagebuffer.SetText(st)
+										u, _ := panel.store[st]
+										tune(u)
+									}
+								})
+						}
+					})
+			}
+		})
+	
+	// カーソルキーで移動する毎に生じるイベント
+	panel.grid.Connect ("selected-children-changed", func() {
+								panel.child_selected_change = true})
+	// playlist_table をチェックして選局ボタンを並べる
+	var keys []string
+	for k, _ := range panel.store {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	for _,k := range keys {
+		label, err := gtk.LabelNew(k)
+		if err == nil {
+			box,_ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
+			icon_f := fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, k))
+			_, width, height, err := gdk.PixbufGetFileInfo(icon_f)
+			if err == nil {
+				if width > 144 {width = 144}
+				if height > 64 {height = 64}
+			}
+			var icon *gtk.Image
+			var er error
+			pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
+			if err != nil {
+				icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
+			} else {
+				icon, er = gtk.ImageNewFromPixbuf(pbuf)
+				if er != nil {
+					icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
+				}
+			}
+			box.PackStart(icon,false,false,2)
+			box.PackStart(label,false,false,2)
+			panel.grid.Insert(box,-1)
+		}
+	}
+    return panel, nil;
 }
 
-func radiopanel_new () (*gtk.FlowBox, error) {
-    grid, err := gtk.FlowBoxNew()
-    if err == nil {
-		grid.SetSelectionMode(gtk.SELECTION_SINGLE)
-		grid.SetHomogeneous(true)
-		grid.SetActivateOnSingleClick(true)
-		grid.SetColumnSpacing(2)
-		grid.SetMaxChildrenPerLine(6)
-		// ラベルにてボタンクリックと等価の動作を行うための準備
-		grid.Connect ("child-activated", child_activate_cb)
-		// カーソルキーで移動する毎に生じるイベント
-		grid.Connect ("selected-children-changed", func() {
-									child_selected_change = true})
-		// playlist_table をチェックして選局ボタンを並べる
-		var keys []string
-		for k, _ := range stlist {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
+func (panel radioPanel) readPlayList(listfile string) error {
+	file, err := os.Open(listfile)
+	if err != nil {
+		return err
+	} 
+	defer file.Close()
 
-		for _,k := range keys {
-			label, err := gtk.LabelNew(k)
-			if err == nil {
-				box,_ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
-				icon_f := fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, k))
-				_, width, height, err := gdk.PixbufGetFileInfo(icon_f)
-				if err == nil {
-					if width > 200 {width = 200}
-					if height > 64 {height = 64}
-				}
-				var icon *gtk.Image
-				var er error
-				pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
-				if err != nil {
-					icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
-				} else {
-					icon, er = gtk.ImageNewFromPixbuf(pbuf)
-					if er != nil {
-						icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
-					}
-				}
-				box.PackStart(icon,false,false,2)
-				box.PackStart(label,false,false,2)
-				grid.Insert(box,-1)
+	scanner := bufio.NewScanner(file)
+	f := false
+	s := ""
+	name := ""
+	for scanner.Scan() {
+		s = scanner.Text()
+		if strings.Contains(s, "#EXTINF:") == true {
+			f = true
+			_, name, _ = strings.Cut(s, "/")
+			name = strings.Trim(name, " ")
+			continue
+		}
+		if f {
+			if len(s) != 0 {
+				f = false
+				panel.store[name] = s
+			//~ fmt.Printf("station name : %s  data : %s\n", name,s)
 			}
 		}
 	}
-    return grid, nil;
+	return nil
 }
 
 func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
@@ -280,7 +292,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
     win, err := gtk.ApplicationWindowNew(app)
     if err == nil {
 		// ボリュームボタン
-		volbtn, err := gtk.VolumeButtonNew();
+		volbtn, err := gtk.VolumeButtonNew()
 		if err != nil {
 			return win, err
 		}
@@ -290,7 +302,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		volbtn.SetValue(0.25)
 		// ストップボタン
 		stopbtn, err := gtk.ButtonNewFromIconName("media-playback-stop-symbolic",
-													gtk.ICON_SIZE_BUTTON);
+													gtk.ICON_SIZE_BUTTON)
 		if err != nil {
 			return win, err
 		}
@@ -300,7 +312,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err == nil {
 			header.SetDecorationLayout("menu:close")
 			header.SetShowCloseButton(true)
-			header.SetTitle(PACKAGE);
+			header.SetTitle(PACKAGE)
 			header.SetHasSubtitle(true)
 			win.SetTitlebar(header)
 			header.PackEnd (volbtn)
@@ -309,19 +321,37 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			win.SetTitle(PACKAGE)
 		}
 		
-		fbox,err := radiopanel_new()
+		// notebook 
+		notebook,err := gtk.NotebookNew()
 		if err != nil {
-			return win, err
+			return win,err
 		}
-		scroll,err := gtk.ScrolledWindowNew(nil,nil)
+		
+		files, err:=filepath.Glob("/home/sakai/.config/mpvradio/playlists/*.m3u")
 		if err != nil {
-			return win, err
+			fmt.Println(err)
 		}
-		scroll.SetKineticScrolling(true);
-		scroll.SetCaptureButtonPress(true);
-		scroll.SetOverlayScrolling(true);
-		scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-		scroll.Add(fbox)
+		for _, v := range files {
+			fbox,err := radiopanel_new(v)
+			if err != nil {
+				return win, err
+			}
+			scroll,err := gtk.ScrolledWindowNew(nil,nil)
+			if err != nil {
+				return win, err
+			}
+			scroll.SetKineticScrolling(true);
+			scroll.SetCaptureButtonPress(true);
+			scroll.SetOverlayScrolling(true);
+			scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+			scroll.Add(fbox.grid)
+			l, _ := gtk.LabelNew(filepath.Base(v))
+			if notebook.AppendPage(scroll, l) < 0 {
+				fmt.Printf("%s append error.\n",v)
+			}
+		}
+		notebook.SetTabPos(gtk.POS_LEFT)
+		notebook.SetScrollable(true)
 
 		mpvmessagebuffer,_ = gtk.EntryBufferNew("",-1)
 		mpvmessage,err := gtk.EntryNewWithBuffer(mpvmessagebuffer)
@@ -335,7 +365,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			return win, err
 		}
 		box.PackStart(mpvmessage, false, false, 0)
-		box.PackStart(scroll, true, true, 0)
+		box.PackStart(notebook, true, true, 0)
 
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
@@ -354,7 +384,6 @@ func main() {
 	}
 	
 	app.Connect("startup", func() {
-		setup_station_list()
 		if err := mpvctl.Open(MPV_SOCKET_PATH);err != nil {
 			fmt.Println("time out.", err)	// time out
 			app.Quit()
