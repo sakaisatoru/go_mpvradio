@@ -45,7 +45,7 @@ type radioPanel struct {
 var (
 	radio_enable bool
 	volume int8
-	mpvmessagebuffer *gtk.EntryBuffer
+	mpvheaderbar *gtk.HeaderBar;
 	mpvret = make(chan string)
 	mu sync.Mutex
 )
@@ -77,7 +77,7 @@ func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 	if radio_enable {
 		if ms.Event == "property-change" {
 			if ms.Name == "metadata/by-key/icy-title" {
-				mpvmessagebuffer.SetText(ms.Data)
+				mpvheaderbar.SetSubtitle(ms.Data)
 				return ms.Data, true
 			}
 		}
@@ -175,7 +175,6 @@ func container_foreach(container *gtk.Container, cb func(wi *gtk.Widget) ) {
 	list.Free()
 }
 
-//~ func radiopanel_new (stl map[string]string) (*gtk.FlowBox, error) {
 func radiopanel_new(playlistfile string) (*radioPanel, error) {
     panel := new(radioPanel)
     panel.store = make(map[string]string)
@@ -208,7 +207,7 @@ func radiopanel_new(playlistfile string) (*radioPanel, error) {
 									p, err := w2.GetName()
 									if err == nil && p == "GtkLabel" {
 										st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
-										mpvmessagebuffer.SetText(st)
+										mpvheaderbar.SetSubtitle(st)
 										u, _ := panel.store[st]
 										tune(u)
 									}
@@ -280,7 +279,6 @@ func (panel radioPanel) readPlayList(listfile string) error {
 			if len(s) != 0 {
 				f = false
 				panel.store[name] = s
-			//~ fmt.Printf("station name : %s  data : %s\n", name,s)
 			}
 		}
 	}
@@ -306,17 +304,19 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err != nil {
 			return win, err
 		}
-		stopbtn.Connect("clicked", func() {mpvctl.Stop(); radio_enable = false})
+		stopbtn.Connect("clicked", func() {	mpvctl.Stop()
+											radio_enable = false
+											mpvheaderbar.SetSubtitle("") })
 		
-		header,err := gtk.HeaderBarNew()
+		mpvheaderbar,err = gtk.HeaderBarNew()
 		if err == nil {
-			header.SetDecorationLayout("menu:close")
-			header.SetShowCloseButton(true)
-			header.SetTitle(PACKAGE)
-			header.SetHasSubtitle(true)
-			win.SetTitlebar(header)
-			header.PackEnd (volbtn)
-			header.PackEnd (stopbtn)
+			mpvheaderbar.SetDecorationLayout("menu:close")
+			mpvheaderbar.SetShowCloseButton(true)
+			mpvheaderbar.SetTitle(PACKAGE)
+			mpvheaderbar.SetHasSubtitle(true)
+			win.SetTitlebar(mpvheaderbar)
+			mpvheaderbar.PackEnd (volbtn)
+			mpvheaderbar.PackEnd (stopbtn)
 		} else {
 			win.SetTitle(PACKAGE)
 		}
@@ -353,18 +353,10 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		notebook.SetTabPos(gtk.POS_LEFT)
 		notebook.SetScrollable(true)
 
-		mpvmessagebuffer,_ = gtk.EntryBufferNew("",-1)
-		mpvmessage,err := gtk.EntryNewWithBuffer(mpvmessagebuffer)
-		if err != nil {
-			return win, err
-		}
-		mpvmessage.SetCanFocus(false)
-
 		box,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
 		if err != nil {
 			return win, err
 		}
-		box.PackStart(mpvmessage, false, false, 0)
 		box.PackStart(notebook, true, true, 0)
 
 		win.Add(box)
