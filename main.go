@@ -45,7 +45,8 @@ type radioPanel struct {
 var (
 	radio_enable bool
 	volume int8
-	mpvheaderbar *gtk.HeaderBar;
+	mpvheaderbar *gtk.HeaderBar
+	inputarea *gtk.Box
 	mpvret = make(chan string)
 	mu sync.Mutex
 )
@@ -207,7 +208,7 @@ func radiopanel_new(playlistfile string) (*radioPanel, error) {
 									p, err := w2.GetName()
 									if err == nil && p == "GtkLabel" {
 										st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
-										mpvheaderbar.SetSubtitle(st)
+										mpvheaderbar.SetSubtitle(st) //
 										u, _ := panel.store[st]
 										tune(u)
 									}
@@ -353,14 +354,39 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		notebook.SetTabPos(gtk.POS_LEFT)
 		notebook.SetScrollable(true)
 
+		// input area
+		inputarea,err = gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 3)
+		if err != nil {
+			return win,err
+		}
+		entrybuffer,err := gtk.EntryBufferNew("",-1)
+		if err != nil {
+			return win,err
+		}
+		btn_tune,_ := gtk.ButtonNewWithLabel("Tune Now")
+		btn_tune.Connect("clicked",func() { 
+			if url, err := entrybuffer.GetText(); err == nil {
+				tune(url)
+				inputarea.Hide()
+			}})
+		btn_cancel,_ := gtk.ButtonNewWithLabel("Cancel")
+		btn_cancel.Connect("clicked", (*gtk.Widget)(unsafe.Pointer(inputarea)).Hide)
+		entry,_ := gtk.EntryNewWithBuffer(entrybuffer)
+		entry.SetPlaceholderText("ここにURLを入力してください")
+		inputarea.PackStart(entry,true,true,0)
+		inputarea.PackEnd(btn_cancel,false,false,0)
+		inputarea.PackEnd(btn_tune,false,false,0)
+		
 		box,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
 		if err != nil {
 			return win, err
 		}
 		box.PackStart(notebook, true, true, 0)
+		box.PackStart(inputarea, false, true, 0)
 
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
+		win.Connect("show",func() {inputarea.Hide()})
 	}
 	return win, err
 }
@@ -384,21 +410,14 @@ func main() {
 		volume = 60
 		go mpvctl.Recv(cb_mpvrecv)
 		
-		//~ <section>
-		  //~ <item>
-			//~ <attribute name="label" translatable="yes">QuickTune</attribute>
-			//~ <attribute name="action">app.quicktune</attribute>
-		  //~ </item>
-		  //~ <item>
-			//~ <attribute name="label" translatable="yes">StatusIcon</attribute>
-			//~ <attribute name="action">app.statusicon</attribute>
-		  //~ </item>
-		//~ </section>
-
 		builder,err := gtk.BuilderNewFromString (`<interface>
 		<!-- interface-requires gtk+ 3.0 -->
 		<menu id="appmenu">
 		<section>
+		  <item>
+			<attribute name="label" translatable="yes">QuickTune</attribute>
+			<attribute name="action">app.quicktune</attribute>
+		  </item>
 		  <item>
 			<attribute name="label" translatable="yes">_about</attribute>
 			<attribute name="action">app.about</attribute>
@@ -415,11 +434,17 @@ func main() {
 			return
 		} 
 		app_entries := []actionEntry{
+				{"quicktune",func(action *glib.SimpleAction) {
+						if inputarea.GetVisible() == true {
+							inputarea.Hide()
+						} else {inputarea.Show()}
+				},"","",nil},
 				{"about", about_activated, "", "", nil},
 				{"quit", func(action *glib.SimpleAction) {app.Quit()}, "", "", nil},
 			}
 		action_map_add_action_entries (app, app_entries)
 		app.SetAccelsForAction("app.quit", []string{"<Ctrl>Q"})
+		app.SetAccelsForAction("app.quicktune", []string{"<Ctrl>L"})
 		app_menu,err := builder.GetObject("appmenu")
 		if err != nil {
 			fmt.Printf("%s\n", err)
