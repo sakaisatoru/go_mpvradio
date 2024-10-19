@@ -26,6 +26,8 @@ const (
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
 	ICON_DIR_PATH	string = "mpvradio/logo"
 	APP_ICON		string = "pixmaps/mpvradio.png"
+	PLAYLISTS		string = "mpvradio/playlists/*.m3u"
+	
 )
 
 type actionEntry struct {
@@ -115,6 +117,33 @@ func tune(url string) {
 }
 
 /*
+ * playlist の検索を行う
+ */
+func getplaylists() ([]string, error) {
+	var(
+		files []string
+		err error
+		dirs []string
+	)
+	dirs = append(dirs, xdg.ConfigHome)
+	dirs = append(dirs, xdg.DataDirs...)
+	
+	for _, v := range dirs {
+		d := filepath.Join(v, PLAYLISTS)
+		//~ fmt.Printf("check dir : %s\n", d)
+		files, err = filepath.Glob(d)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		if len(files) >= 1 {
+			break
+		}
+	}
+	return files, err
+}
+
+/*
  * gotk3 にラッパーがないので go で書いた g_action_map_add_action_entries()
  * https://github.com/GNOME/glib/blob/main/gio/gactionmap.c
  * 
@@ -144,7 +173,7 @@ func action_map_add_action_entries (app *gtk.Application, entries []actionEntry)
 			state = glib.VariantFromString(entries[i].state)
 			action = glib.SimpleActionNewStateful(entries[i].name, parameter_type, state)
 		} else {
-			fmt.Println("make stateless action")
+			//~ fmt.Println("make stateless action")
 			parameter_type = nil
 			action = glib.SimpleActionNew(entries[i].name, parameter_type)
 		}
@@ -310,46 +339,47 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 											mpvheaderbar.SetSubtitle("") })
 		
 		mpvheaderbar,err = gtk.HeaderBarNew()
-		if err == nil {
-			mpvheaderbar.SetDecorationLayout("menu:close")
-			mpvheaderbar.SetShowCloseButton(true)
-			mpvheaderbar.SetTitle(PACKAGE)
-			mpvheaderbar.SetHasSubtitle(true)
-			win.SetTitlebar(mpvheaderbar)
-			mpvheaderbar.PackEnd (volbtn)
-			mpvheaderbar.PackEnd (stopbtn)
-		} else {
-			win.SetTitle(PACKAGE)
+		if err != nil {
+			return win,err
 		}
+		mpvheaderbar.SetDecorationLayout("menu:close")
+		mpvheaderbar.SetShowCloseButton(true)
+		mpvheaderbar.SetTitle(PACKAGE)
+		mpvheaderbar.SetHasSubtitle(true)
+		win.SetTitlebar(mpvheaderbar)
+		mpvheaderbar.PackEnd (volbtn)
+		mpvheaderbar.PackEnd (stopbtn)
 		
 		// notebook 
 		notebook,err := gtk.NotebookNew()
 		if err != nil {
 			return win,err
 		}
-		
-		files, err:=filepath.Glob("/home/sakai/.config/mpvradio/playlists/*.m3u")
-		if err != nil {
-			fmt.Println(err)
-		}
-		for _, v := range files {
-			fbox,err := radiopanel_new(v)
-			if err != nil {
-				return win, err
+
+		files,err := getplaylists()
+		if err == nil && len(files) >= 1 {
+			for _, v := range files {
+				fbox,err := radiopanel_new(v)
+				if err != nil {
+					return win, err
+				}
+				scroll,err := gtk.ScrolledWindowNew(nil,nil)
+				if err != nil {
+					return win, err
+				}
+				scroll.SetKineticScrolling(true);
+				scroll.SetCaptureButtonPress(true);
+				scroll.SetOverlayScrolling(true);
+				scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+				scroll.Add(fbox.grid)
+				l, _ := gtk.LabelNew(filepath.Base(v))
+				if notebook.AppendPage(scroll, l) < 0 {
+					fmt.Printf("%s append error.\n",v)
+				}
 			}
-			scroll,err := gtk.ScrolledWindowNew(nil,nil)
-			if err != nil {
-				return win, err
-			}
-			scroll.SetKineticScrolling(true);
-			scroll.SetCaptureButtonPress(true);
-			scroll.SetOverlayScrolling(true);
-			scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-			scroll.Add(fbox.grid)
-			l, _ := gtk.LabelNew(filepath.Base(v))
-			if notebook.AppendPage(scroll, l) < 0 {
-				fmt.Printf("%s append error.\n",v)
-			}
+		} else {
+			l, _ := gtk.LabelNew("No Data")
+			notebook.AppendPage(l, l)
 		}
 		notebook.SetTabPos(gtk.POS_LEFT)
 		notebook.SetScrollable(true)
@@ -419,7 +449,7 @@ func main() {
 			<attribute name="action">app.quicktune</attribute>
 		  </item>
 		  <item>
-			<attribute name="label" translatable="yes">_about</attribute>
+			<attribute name="label" translatable="yes">_About</attribute>
 			<attribute name="action">app.about</attribute>
 		  </item>
 		  <item>
