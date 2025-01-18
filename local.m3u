@@ -1,0 +1,38 @@
+#EXTM3U
+
+#EXTINF:-1,Saitama / スマイルラジオ
+mms://hdv.nkansai.tv/smile
+
+
+#EXTINF:-1,Tokyo / TBS
+plugin:/radiko.py/TBS
+#EXTINF:-1,Tokyo / 文化放送
+plugin:/radiko.py/QRR
+#EXTINF:-1,Tokyo / ニッポン放送
+plugin:/radiko.py/LFR
+#EXTINF:-1,Tokyo / interfm
+plugin:/radiko.py/INT
+#EXTINF:-1,Tokyo / TOKYO FM
+plugin:/radiko.py/FMT
+#EXTINF:-1,Tokyo / J-WAVE
+plugin:/radiko.py/FMJ
+#EXTINF:-1,Tokyo / ラジオ日本
+plugin:/radiko.py/JORF
+#EXTINF:-1,Chiba / bayfm78
+plugin:/radiko.py/BAYFM78
+#EXTINF:-1,Saitama / NACK5
+plugin:/radiko.py/NACK5
+#EXTINF:-1,Kanagawa / FMヨコハマ
+plugin:/radiko.py/YFM
+#EXTINF:-1,Ibaraki / LuckyFM茨城放送
+plugin:/radiko.py/IBS
+#EXTINF:-1,Tokyo / ラジオNIKKEI1
+plugin:/radiko.py/RN1
+#EXTINF:-1,Tokyo / ラジオNIKKEI2
+plugin:/radiko.py/RN2
+#EXTINF:-1,Tokyo / NHK R1(Tokyo)
+plugin:/radiko.py/JOAK
+#EXTINF:-1,Tokyo / NHK FM(Tokyo)
+plugin:/radiko.py/JOAK-FM
+#EXTINF:-1,NHK R2 / NHK R2
+https://radio-stream.nhk.jp/hls/live/2023501/nhkradiruakr2/master48k.m3u8

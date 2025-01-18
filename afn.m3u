@@ -1,0 +1,13 @@
+#EXTM3U
+
+#EXTINF:-1,USA / AFN TOKYO
+plugin:/afn.py/AFNP_TKO
+#EXTINF:-1,USA / AFN Gravity
+plugin:/afn.py/AFN_GRV
+#EXTINF:-1,USA / AFN Joe Radio
+plugin:/afn.py/AFN_JOEP
+#EXTINF:-1,USA / AFN Hot AC
+plugin:/afn.py/AFN_HOTP
+#EXTINF:-1,USA / AFN Legacy
+plugin:/afn.py/AFN_LGYP
+
