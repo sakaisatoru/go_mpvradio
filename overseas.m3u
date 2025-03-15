@@ -24,3 +24,6 @@ http://stream.radioparadise.com/rock-320
 #EXTINF:-1,radioparadise.com(global mix) / RP(global mix)
 http://stream.radioparadise.com/global-320
 
+#EXTINF:-1,Vocaloid Radio / Vocaloid
+http://curiosity.shoutca.st:8019/stream
+

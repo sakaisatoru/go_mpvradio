@@ -12,6 +12,7 @@ import (
     "unsafe"
     "os"
     "sync"
+    "path"
     "path/filepath"
     "slices"
     "local.packages/netradio"
@@ -27,7 +28,6 @@ const (
 	ICON_DIR_PATH	string = "mpvradio/logo"
 	APP_ICON		string = "pixmaps/mpvradio.png"
 	PLAYLISTS		string = "mpvradio/playlists/*.m3u"
-	
 )
 
 type actionEntry struct {
@@ -257,26 +257,29 @@ func radiopanel_new(playlistfile string) (*radioPanel, error) {
 	}
 	slices.Sort(keys)
 
-	for _,k := range keys {
-		label, err := gtk.LabelNew(k)
+	for k := range keys {
+		label, err := gtk.LabelNew(keys[k])
 		if err == nil {
 			box,_ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
-			icon_f := fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, k))
+			icon_f := fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, keys[k]))
 			_, width, height, err := gdk.PixbufGetFileInfo(icon_f)
-			if err == nil {
-				if width > 144 {width = 144}
-				if height > 64 {height = 64}
-			}
-			var icon *gtk.Image
-			var er error
-			pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
 			if err != nil {
-				icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
-			} else {
-				icon, er = gtk.ImageNewFromPixbuf(pbuf)
-				if er != nil {
+				t0, _ := panel.store[keys[k]]
+				icon_f = fmt.Sprintf("%s.png", filepath.Join(xdg.CacheHome, ICON_DIR_PATH, path.Base(t0)))
+				_, width, height, _ = gdk.PixbufGetFileInfo(icon_f)
+			}
+			if width > 144 {width = 144}
+			if height > 64 {height = 64}
+			
+			var icon *gtk.Image
+			pbuf, err := gdk.PixbufNewFromFileAtSize(icon_f, width, height)
+			if err == nil {
+				icon, err = gtk.ImageNewFromPixbuf(pbuf)
+				if err != nil {
 					icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
 				}
+			} else {
+				icon, _ = gtk.ImageNewFromIconName(PACKAGE, gtk.ICON_SIZE_DIALOG)
 			}
 			box.PackStart(icon,false,false,2)
 			box.PackStart(label,false,false,2)
@@ -327,7 +330,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		volbtn.Connect("value-changed", func(volbtn *gtk.VolumeButton, v float64) {
 			mpvctl.Setvol(int8(v*float64(mpvctl.Volume_steps)))
 		})
-		volbtn.SetValue(0.25)
+		volbtn.SetValue(0.7)
 		// ストップボタン
 		stopbtn, err := gtk.ButtonNewFromIconName("media-playback-stop-symbolic",
 													gtk.ICON_SIZE_BUTTON)
