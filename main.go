@@ -350,8 +350,8 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		mpvheaderbar.PackEnd (volbtn)
 		mpvheaderbar.PackEnd (stopbtn)
 		
-		// notebook 
-		notebook,err := gtk.NotebookNew()
+		// stack
+		notebook,err := gtk.StackNew()
 		if err != nil {
 			return win,err
 		}
@@ -373,16 +373,9 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 				scroll.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 				scroll.Add(fbox.grid)
 				l, _ := gtk.LabelNew(filepath.Base(v))
-				if notebook.AppendPage(scroll, l) < 0 {
-					fmt.Printf("%s append error.\n",v)
-				}
+				notebook.AddTitled(scroll, l.GetLabel(), l.GetLabel())
 			}
-		} else {
-			l, _ := gtk.LabelNew("No Data")
-			notebook.AppendPage(l, l)
 		}
-		notebook.SetTabPos(gtk.POS_LEFT)
-		notebook.SetScrollable(true)
 
 		// input area
 		inputarea,err = gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 3)
@@ -411,7 +404,18 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err != nil {
 			return win, err
 		}
-		box.PackStart(notebook, true, true, 0)
+		box2,err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL,2)
+		if err != nil {
+			return win, err
+		}
+		sw,err := gtk.StackSidebarNew()
+		if err != nil {
+			return win,err
+		}
+		sw.SetStack(notebook)
+		box2.PackStart(sw, false, true, 0)
+		box2.PackStart(notebook, true, true, 0)
+		box.PackStart(box2, true, true, 0)
 		box.PackStart(inputarea, false, true, 0)
 
 		win.Add(box)

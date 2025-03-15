@@ -1,6 +1,6 @@
 module go_mpvradio/go_mpvradio
 
-go 1.22.1
+go 1.23.5
 
 replace local.packages/netradio => ./netradio
 
