@@ -17,11 +17,13 @@ import (
     "slices"
     "local.packages/netradio"
     "local.packages/mpvctl"
+    "time"
+    "flag"
 )
 
 const (
 	PACKAGE			string = "go_mpvradio"
-	PACKAGE_VERSION	string = "0.1.0"
+	PACKAGE_VERSION	string = "0.1.1"
 	appID 			string = "com.google.endeavor2wako.go_mpvradio"
 	stationlist 	string = "/usr/local/share/mpvradio/playlists/radio.m3u"
 	MPV_SOCKET_PATH string = "/run/user/1000/mpvsocket"
@@ -51,6 +53,8 @@ var (
 	inputarea *gtk.Box
 	mpvret = make(chan string)
 	mu sync.Mutex
+	last_selected_station string = ""
+	tabletmode bool
 )
 
 func about_activated(action *glib.SimpleAction) {
@@ -111,8 +115,11 @@ func tune(url string) {
 		station_url = url
 	}
 
-	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
-	mpvctl.Send(s)
+	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", "/usr/local/share/mpvradio/sounds/button57.mp3")
+	err = mpvctl.Send(s)
+	time.Sleep(300*time.Millisecond)
+	s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
+	err = mpvctl.Send(s)
 	radio_enable = true	
 }
 
@@ -226,25 +233,28 @@ func radiopanel_new(playlistfile string) (*radioPanel, error) {
 	// ラベルにてボタンクリックと等価の動作を行うための準備
 	panel.grid.Connect ("child-activated", 
 		func(box *gtk.FlowBox, child *gtk.FlowBoxChild) {
-			if panel.child_selected_change {
-				panel.child_selected_change = false
-				container_foreach((*gtk.Container)(unsafe.Pointer(child)), 
-					func(wi *gtk.Widget) {
-						a, err := wi.GetName()
-						if err == nil && a == "GtkBox" {
-							container_foreach((*gtk.Container)(unsafe.Pointer(wi)), 
-								func(w2 *gtk.Widget) {
-									p, err := w2.GetName()
-									if err == nil && p == "GtkLabel" {
-										st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
+			panel.child_selected_change = false
+			container_foreach((*gtk.Container)(unsafe.Pointer(child)), 
+				func(wi *gtk.Widget) {
+					a, err := wi.GetName()
+					if err == nil && a == "GtkBox" {
+						container_foreach((*gtk.Container)(unsafe.Pointer(wi)), 
+							func(w2 *gtk.Widget) {
+								p, err := w2.GetName()
+								if err == nil && p == "GtkLabel" {
+									st := (*gtk.Label)(unsafe.Pointer(w2)).GetLabel()
+									// 同一局の連続接続を抑止する。複数のスタックに跨って判断可能なように
+									// 大域変数を使う
+									if st != last_selected_station {
 										mpvheaderbar.SetSubtitle(st) //
 										u, _ := panel.store[st]
+										last_selected_station = st
 										tune(u)
 									}
-								})
-						}
-					})
-			}
+								}
+							})
+					}
+				})
 		})
 	
 	// カーソルキーで移動する毎に生じるイベント
@@ -339,6 +349,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		}
 		stopbtn.Connect("clicked", func() {	mpvctl.Stop()
 											radio_enable = false
+											last_selected_station = ""
 											mpvheaderbar.SetSubtitle("") })
 		
 		mpvheaderbar,err = gtk.HeaderBarNew()
@@ -358,7 +369,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err != nil {
 			return win,err
 		}
-
+		//~ notebook.SetTransitionType(gtk.STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT)
 		files,err := getplaylists()
 		if err == nil && len(files) >= 1 {
 			for _, v := range files {
@@ -379,7 +390,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 				notebook.AddTitled(scroll, l.GetLabel(), l.GetLabel())
 			}
 		}
-
+		
 		// input area
 		inputarea,err = gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 3)
 		if err != nil {
@@ -402,25 +413,50 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		inputarea.PackStart(entry,true,true,0)
 		inputarea.PackEnd(btn_cancel,false,false,0)
 		inputarea.PackEnd(btn_tune,false,false,0)
-		
+
 		box,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
 		if err != nil {
 			return win, err
 		}
-		box2,err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL,2)
-		if err != nil {
-			return win, err
-		}
-		sw,err := gtk.StackSidebarNew()
-		if err != nil {
-			return win,err
-		}
-		sw.SetStack(notebook)
-		box2.PackStart(sw, false, true, 0)
-		box2.PackStart(notebook, true, true, 0)
-		box.PackStart(box2, true, true, 0)
-		box.PackStart(inputarea, false, true, 0)
 
+		if tabletmode {
+			// タブレット向けレイアウト
+			box2,err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL,2)
+			if err != nil {
+				return win, err
+			}
+			sw,err := gtk.StackSwitcherNew()
+			if err != nil {
+				return win,err
+			}
+			box3,err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL,1)
+			if err != nil {
+				return win,err
+			}
+			notebook.SetTransitionType(gtk.STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT)
+			sw.SetStack(notebook)
+			box3.PackStart(sw, true,false,1)
+			box2.PackStart(box3, false, true, 5)
+			box2.PackStart(notebook, true, true, 0)
+			box.PackStart(inputarea, false, true, 0)
+			box.PackStart(box2, true, true, 0)
+		} else {
+			// デスクトップ向けレイアウト
+			box2,err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL,2)
+			if err != nil {
+				return win, err
+			}
+			sw,err := gtk.StackSidebarNew()
+			if err != nil {
+				return win,err
+			}
+			notebook.SetTransitionType(gtk.STACK_TRANSITION_TYPE_SLIDE_UP_DOWN)
+			sw.SetStack(notebook)
+			box2.PackStart(sw, false, true, 0)
+			box2.PackStart(notebook, true, true, 0)
+			box.PackStart(inputarea, false, true, 0)
+			box.PackStart(box2, true, true, 0)
+		}
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
 		win.Connect("show",func() {inputarea.Hide()})
@@ -429,14 +465,20 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 }
 
 func main() {
+	app, err := gtk.ApplicationNew(appID, glib.APPLICATION_HANDLES_COMMAND_LINE)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if err := mpvctl.Init(MPV_SOCKET_PATH);err != nil {
 		log.Fatal(err)
 	}
-	
-	app, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
-	if err != nil {
-		log.Fatal("Could not create application.", err)
-	}
+
+	app.Connect("command-line", func()  {
+		flag.BoolVar(&tabletmode, "tablet", false, "タブレットモードで起動する")
+		flag.Parse()
+		app.Activate()
+	})
 	
 	app.Connect("startup", func() {
 		if err := mpvctl.Open(MPV_SOCKET_PATH);err != nil {
@@ -527,6 +569,9 @@ func main() {
 			s := "{ \"command\": [\"observe_property_string\", 1, \"metadata/by-key/icy-title\"] }"
 			mpvctl.Send(s)
 			w.ShowAll()
+			if tabletmode {
+				w.Maximize()
+			}
 			w.Present()
 		} else {
 			d := windows.Data()
