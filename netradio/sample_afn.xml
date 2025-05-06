@@ -1,0 +1,126 @@
+https://playerservices.streamtheworld.com/api/livestream?station=AFN02_S01&transports=http,hls&version=1.8
+
+<live_stream_config xmlns="http://provisioning.streamtheworld.com/player/livestream-1.8" version="1.8">
+<mountpoints>
+	<mountpoint>
+		<status>
+			<status-code>200</status-code>
+			<status-message>OK</status-message>
+		</status>
+		<transports>
+			<transport>http</transport>
+			<transport mountSuffix="/HLS/playlist.m3u8">hls</transport>
+		</transports>
+		<metadata>
+			<shoutcast-v1 enabled="true" mountSuffix="_SC"/>
+			<shoutcast-v2 enabled="false" mountSuffix="_SC"/>
+			<sse-sideband enabled="true" streamSuffix="_SC" metadataSuffix="_SBM"/>
+		</metadata>
+		<servers>
+			<server sid="19273">
+				<ip>19273.live.streamtheworld.com</ip>
+				<ports>
+					<port type="http">80</port>
+					<port type="http">3690</port>
+				</ports>
+			</server>
+			<server sid="17843">
+				<ip>17843.live.streamtheworld.com</ip>
+				<ports>
+					<port type="http">80</port>
+					<port type="http">3690</port>
+				</ports>
+			</server>
+			<server sid="25003">
+				<ip>25003.live.streamtheworld.com</ip>
+				<ports>
+					<port type="http">80</port>
+					<port type="http">3690</port>
+				</ports>
+			</server>
+		</servers>
+		<metrics>
+			<tag name="uuid"/>
+		</metrics>
+		<mount>AFN02_S01AAC</mount>
+		<format>FLV</format>
+		<bitrate>32000</bitrate>
+		<media-format container="flv" cuepoints="stwcue" trackScheme="audio">
+			<audio index="0" samplerate="44100" codec="heaacv2" bitrate="32000" channels="2"/>
+		</media-format>
+		<authentication>0</authentication>
+		<timeout>0</timeout>
+		<send-page-url>0</send-page-url>
+	</mountpoint>
+	<mountpoint>
+		<status>
+		<status-code>200</status-code>
+		<status-message>OK</status-message>
+		</status>
+		<transports>
+		<transport>http</transport>
+		</transports>
+		<metadata>
+		<shoutcast-v1 enabled="true" mountSuffix="_SC"/>
+		<shoutcast-v2 enabled="false" mountSuffix="_SC"/>
+		<sse-sideband enabled="true" streamSuffix="_SC" metadataSuffix="_SBM"/>
+		</metadata>
+		<servers>
+			<server sid="24883">
+			<ip>24883.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+			</server>
+			<server sid="18243">
+			<ip>18243.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+			</server>
+			<server sid="17793">
+			<ip>17793.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+			</server>
+			<server sid="24923">
+			<ip>24923.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+		</server>
+		<server sid="14923">
+			<ip>14923.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+			</server>
+			<server sid="14013">
+			<ip>14013.live.streamtheworld.com</ip>
+			<ports>
+			<port type="http">80</port>
+			<port type="http">3690</port>
+			</ports>
+			</server>
+		</servers>
+		<metrics>
+		<tag name="uuid"/>
+		</metrics>
+		<mount>AFN02_S01</mount>
+		<format>FLV</format>
+		<bitrate>96000</bitrate>
+		<media-format container="flv" cuepoints="stwcue" trackScheme="audio">
+		<audio index="0" samplerate="44100" codec="mp3" bitrate="96000" channels="2"/>
+		</media-format>
+		<authentication>0</authentication>
+		<timeout>0</timeout>
+		<send-page-url>0</send-page-url>
+		</mountpoint>
+</mountpoints>
+</live_stream_config>

@@ -1,38 +1,115 @@
 package netradio
 
 import (
-	"fmt"
 	"context"
-	"os"
+	"encoding/base64"
+	"encoding/xml"
+	"fmt"
 	"github.com/carlmjohnson/requests"
 	"net/http"
-	"encoding/base64"
-	"strconv"
+	"os"
 	"regexp"
+	"strconv"
 )
 
 const (
-	auth_key string = "bcd151073c03b352e1ef2fd66c32209da9ca0afa" // 現状は固有 key_lenght = 0
-	tokenfile string = "/run/radiko_token"
+	auth_key   string = "bcd151073c03b352e1ef2fd66c32209da9ca0afa" // 現状は固有 key_lenght = 0
+	tokenfile  string = "/tmp/radiko_token"
+	afnurlfile string = "/tmp/afnurl"
 )
+
+type Ports struct {
+	XMLName xml.Name `xml:"ports"`
+	Port    []string `xml:"port"`
+}
+
+type Status struct {
+	XMLName        xml.Name `xml:"status"`
+	Status_code    int      `xml:"status-code"`
+	Status_message string   `xml:"status-message"`
+}
+
+type Metadata struct {
+	XMLName      xml.Name `xml:"metadata"`
+	Shoutcast_v1 string   `xml:"shoutcast-v1"`
+	Shoutcast_v2 string   `xml:"shoutcast-v2"`
+	Sse_sideband string   `xml:"sse-sideband"`
+}
+
+type Audio struct {
+	XMLName xml.Name `xml:"audio"`
+	Codec   string   `xml:"codec,attr"`
+}
+
+type Media_format struct {
+	XMLName xml.Name `xml:"media-format"`
+	Audio   Audio    `xml:"audio"`
+}
+
+type Transports struct {
+	XMLName   xml.Name `xml:"transports"`
+	Transport []string `xml:"transport"`
+}
+
+type Server struct {
+	XMLName xml.Name `xml:"server"`
+	Ip      string   `xml:"ip"`
+	Ports   Ports    `xml:"ports"`
+}
+
+type Servers struct {
+	XMLName xml.Name `xml:"servers"`
+	Server  []Server `xml:"server"`
+}
+
+type Mountpoint struct {
+	XMLName        xml.Name     `xml:"mountpoint"`
+	Status         Status       `xml:"status"`
+	Tr             Transports   `xml:"transports"`
+	Me             Metadata     `xml:"metadata"`
+	Servers        Servers      `xml:"servers"`
+	Mount          string       `xml:"mount"`
+	Format         string       `xml:"format"`
+	Bitrate        int          `xml:"bitrate"`
+	MediaFormat    Media_format `xml:"media-format"`
+	Authentication int          `xml:"authentication"`
+	Timeout        int          `xml:"timeout"`
+	Send_page_url  int          `xml:"send-page-url"`
+}
+
+type Mountpoints struct {
+	XMLName xml.Name     `xml:"mountpoints"`
+	Mp      []Mountpoint `xml:"mountpoint"`
+}
+
+type Live_stream_config struct {
+	XMLName xml.Name `xml:"live_stream_config"`
+	Xmlns   string   `xml:"xmlns,attr"`
+	Version string   `xml:"version,attr"`
+}
+
+type afnfeed struct {
+	Lsc Live_stream_config `xml:"live_stream_config"`
+	Mps Mountpoints        `xml:"mountpoints"`
+}
 
 func gen_temp_chunk_m3u8_url(url string, auth_token string) (string, error) {
 	var (
 		chunkurl string
-		err error
+		err      error
 	)
-	
-    headers := make(http.Header)
-    headers.Add("X-Radiko-AuthToken", auth_token)
-	
+
+	headers := make(http.Header)
+	headers.Add("X-Radiko-AuthToken", auth_token)
+
 	h2 := http.Header{}
 	var s string
 	err = requests.
-			URL(url).
-			Headers(headers).
-			CopyHeaders(h2).
-			ToString(&s).
-			Fetch(context.Background())
+		URL(url).
+		Headers(headers).
+		CopyHeaders(h2).
+		ToString(&s).
+		Fetch(context.Background())
 	if err == nil {
 		re := regexp.MustCompile(`https?://.+m3u8`)
 		chunkurl = re.FindString(s)
@@ -43,24 +120,35 @@ func gen_temp_chunk_m3u8_url(url string, auth_token string) (string, error) {
 }
 
 func AFN_get_url_with_api(station string) (string, error) {
-	url := fmt.Sprintf("https://playerservices.streamtheworld.com/api/livestream?station=%s&transports=http,hls&version=1.8", station)
 	var s string
+	u := ""
+	url := fmt.Sprintf("https://playerservices.streamtheworld.com/api/livestream?station=%s&transports=http,hls&version=1.8", station)
 	err := requests.
-			URL(url).
-			ToString(&s).
-			Fetch(context.Background())
-	var u string
+		URL(url).
+		ToString(&s).
+		Fetch(context.Background())
+
+	lsc := afnfeed{}
 	if err == nil {
-		re := regexp.MustCompile("<ip>(.+?)</ip>")
-		m := re.FindStringSubmatch(s)
-		if len(m) > 0 {
-			u = fmt.Sprintf("http://%s/%s.mp3", string(m[1]), station)
-		} else {
-			u = ""
+		e := xml.Unmarshal([]byte(s), &lsc)
+		if e == nil {
+			for _, mountpoint := range lsc.Mps.Mp {
+				if mountpoint.MediaFormat.Audio.Codec == "mp3" {
+					t, _ := os.ReadFile(afnurlfile)
+					cacheurl := string(t)
+					newurl := mountpoint.Servers.Server[0].Ip
+					for _, v := range mountpoint.Servers.Server {
+						if v.Ip == cacheurl {
+							newurl = cacheurl
+							break
+						}
+					}
+					u = fmt.Sprintf("https://%s/%s.mp3", newurl, station)
+					os.WriteFile(afnurlfile, []byte(newurl), 0666)
+					break
+				}
+			}
 		}
-	} else {
-		//~ fmt.Println("afn api ",err)
-		u = ""
 	}
 	return u, err
 }
@@ -68,19 +156,19 @@ func AFN_get_url_with_api(station string) (string, error) {
 func Radiko_get_url(station string) (string, error) {
 	var (
 		authtoken string
-		chunkurl string
-		err error = nil
+		chunkurl  string
+		err       error = nil
 	)
 
 	station_url := fmt.Sprintf("http://f-radiko.smartstream.ne.jp/%s/_definst_/simul-stream.stream/playlist.m3u8", station)
-	
+
 	t, _ := os.ReadFile(tokenfile)
 	authtoken = string(t)
 	chunkurl, err = gen_temp_chunk_m3u8_url(station_url, authtoken)
-		
+
 	if err != nil || len(chunkurl) == 0 {
 		url := "https://radiko.jp/v2/api/auth1"
-		
+
 		h := make(http.Header)
 		h.Add("User-Agent", "curl/7.56.1")
 		h.Add("Accept", "*/*")
@@ -92,21 +180,21 @@ func Radiko_get_url(station string) (string, error) {
 		h2 := http.Header{}
 		var s string
 		err := requests.
-				URL(url).
-				Headers(h).
-				CopyHeaders(h2).
-				ToString(&s).
-				Fetch(context.Background())
+			URL(url).
+			Headers(h).
+			CopyHeaders(h2).
+			ToString(&s).
+			Fetch(context.Background())
 		if err != nil {
 			//~ fmt.Println("Error ",err)
 			goto exit_this
 		}
-	
-		authtoken  = h2.Get("x-radiko-authtoken")
-		offset, _  := strconv.Atoi(h2.Get("x-radiko-keyoffset"))
-		length, _  := strconv.Atoi(h2.Get("x-radiko-keylength"))
-		partialkey := base64.StdEncoding.EncodeToString([]byte(auth_key[offset:offset+length]))
-		
+
+		authtoken = h2.Get("x-radiko-authtoken")
+		offset, _ := strconv.Atoi(h2.Get("x-radiko-keyoffset"))
+		length, _ := strconv.Atoi(h2.Get("x-radiko-keylength"))
+		partialkey := base64.StdEncoding.EncodeToString([]byte(auth_key[offset : offset+length]))
+
 		//~ fmt.Println("authtoken update.")
 		os.WriteFile(tokenfile, []byte(authtoken), 0666)
 
@@ -118,13 +206,13 @@ func Radiko_get_url(station string) (string, error) {
 		h3.Add("X-Radiko-Device", "pc")
 
 		h4 := http.Header{}
-		var ss string			// ss にはリージョンが入る
+		var ss string // ss にはリージョンが入る
 		err = requests.
-				URL(url2).
-				Headers(h3).
-				CopyHeaders(h4).
-				ToString(&ss).
-				Fetch(context.Background())
+			URL(url2).
+			Headers(h3).
+			CopyHeaders(h4).
+			ToString(&ss).
+			Fetch(context.Background())
 		if err != nil {
 			//~ fmt.Println("Error ",err)
 			goto exit_this
@@ -134,4 +222,3 @@ func Radiko_get_url(station string) (string, error) {
 exit_this:
 	return chunkurl, err
 }
-

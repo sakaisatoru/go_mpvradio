@@ -1,13 +1,27 @@
 #EXTM3U
 
-#EXTINF:-1,USA / AFN TOKYO
+#EXTINF:-1,USA / AFN_Tokyo
 plugin:/afn.py/AFNP_TKO
+#EXTINF:-1,USA / AFN_Iwakuni
+plugin:/afn.py/AFNP_IWA
+#EXTINF:-1,USA / AFN_Misawa
+plugin:/afn.py/AFNP_MSW
+#EXTINF:-1,USA / AFN_Okinawa
+plugin:/afn.py/AFNP_OKN
+#EXTINF:-1,USA / AFN_Sasebo
+plugin:/afn.py/AFNP_SBO
 #EXTINF:-1,USA / AFN Gravity
 plugin:/afn.py/AFN_GRV
-#EXTINF:-1,USA / AFN Joe Radio
-plugin:/afn.py/AFN_JOEP
-#EXTINF:-1,USA / AFN Hot AC
-plugin:/afn.py/AFN_HOTP
-#EXTINF:-1,USA / AFN Legacy
-plugin:/afn.py/AFN_LGYP
+#EXTINF:-1,USA / Hall_of_Fame
+plugin:/afn.py/AFN01_S01
+#EXTINF:-1,USA / On_Stage
+plugin:/afn.py/AFN02_S01
+#EXTINF:-1,USA / The_Groove
+plugin:/afn.py/AFN03_S01
+#EXTINF:-1,USA / Mach_5
+plugin:/afn.py/AFN04_S01
+#EXTINF:-1,USA / Jazz+
+plugin:/afn.py/AFN05_S01
+#EXTINF:-1,USA / AFN_Country
+plugin:/afn.py/AFN_CTY
 

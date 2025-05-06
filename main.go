@@ -119,6 +119,7 @@ func tune(url string) {
 	err = mpvctl.Send(s)
 	time.Sleep(300*time.Millisecond)
 	s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
+fmt.Println(station_url)
 	err = mpvctl.Send(s)
 	radio_enable = true	
 }
