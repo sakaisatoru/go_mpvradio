@@ -119,7 +119,7 @@ func tune(url string) {
 	err = mpvctl.Send(s)
 	time.Sleep(300*time.Millisecond)
 	s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
-fmt.Println(station_url)
+//~ fmt.Println(station_url)
 	err = mpvctl.Send(s)
 	radio_enable = true	
 }
@@ -544,16 +544,19 @@ func main() {
 			fmt.Println(err)
 		}
 
-		windows := app.GetWindows()
-		if windows != nil {
-			windows.Foreach( func(e interface{}) {
-				if w,ok := e.(*gtk.Window);ok {
-					if w.InDestruction() == false {
-						w.Destroy()
-					}
-				}
-			})
-		}
+		// マルチウィンドウ時、積極的に破壊する。最後の一つは自動で破壊されるため、
+		// 残して置かないと異常終了の原因となる。
+		// 今回はシングルウィンドウなので省略。
+		//~ windows := app.GetWindows()
+		//~ if windows != nil {
+			//~ windows.Foreach( func(e interface{}) {
+				//~ if w,ok := e.(*gtk.Window);ok {
+					//~ if w.InDestruction() == false {
+						//~ w.Destroy()
+					//~ }
+				//~ }
+			//~ })
+		//~ }
 		fmt.Println("shutdown.")
 	})
 
