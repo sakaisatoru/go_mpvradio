@@ -364,8 +364,14 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		if err != nil {
 			return win, err
 		}
-		mpvheaderbar.SetDecorationLayout("menu:close")
-		mpvheaderbar.SetShowCloseButton(true)
+		mm := app.GetAppMenu()
+		image, _ := gtk.ImageNewFromIconName("open-menu-symbolic", gtk.ICON_SIZE_MENU)
+		menubutton, _ := gtk.MenuButtonNew()
+		menubutton.SetMenuModel(mm)
+		menubutton.SetImage(image)
+		mpvheaderbar.PackStart(menubutton)
+		//~ mpvheaderbar.SetDecorationLayout("menu:close")
+		mpvheaderbar.SetShowCloseButton(true) // ウィンドウマネージャの設定に従う
 		mpvheaderbar.SetTitle(PACKAGE)
 		mpvheaderbar.SetHasSubtitle(true)
 		win.SetTitlebar(mpvheaderbar)
