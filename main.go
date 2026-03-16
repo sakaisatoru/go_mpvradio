@@ -434,6 +434,23 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			return win, err
 		}
 
+		// アラームセット
+		digitAlarm := digitClockNew()
+		digitAlarm.SetValue(time.Now().Format(time.TimeOnly))
+		revealer, _ := gtk.RevealerNew()
+		revealer.Add(digitAlarm)
+		revealer.SetTransitionType(gtk.REVEALER_TRANSITION_TYPE_SLIDE_DOWN)
+		revealer.SetTransitionDuration(300)
+		revealer.SetRevealChild(false)
+		boxtmp, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+		boxtmp.PackStart(revealer, true, false, 0)
+		btnSetAlarm, _ := gtk.ButtonNewWithLabel("Alarm")
+		btnSetAlarm.Connect("clicked", func(b *gtk.Button) {
+			f := revealer.GetChildRevealed()
+			revealer.SetRevealChild(!f)
+		})
+		mpvheaderbar.PackStart(btnSetAlarm)
+
 		if tabletmode {
 			// タブレット向けレイアウト
 			box2, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
@@ -453,6 +470,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			box3.PackStart(sw, true, false, 1)
 			box2.PackStart(box3, false, true, 5)
 			box2.PackStart(notebook, true, true, 0)
+			box.PackStart(boxtmp, false, true, 0)
 			box.PackStart(inputarea, false, true, 0)
 			box.PackStart(box2, true, true, 0)
 		} else {
@@ -469,6 +487,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			sw.SetStack(notebook)
 			box2.PackStart(sw, false, true, 0)
 			box2.PackStart(notebook, true, true, 0)
+			box.PackStart(boxtmp, false, true, 0)
 			box.PackStart(inputarea, false, true, 0)
 			box.PackStart(box2, true, true, 0)
 		}
@@ -566,20 +585,8 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-
-		// マルチウィンドウ時、積極的に破壊する。最後の一つは自動で破壊されるため、
-		// 残して置かないと異常終了の原因となる。
-		// 今回はシングルウィンドウなので省略。
-		//~ windows := app.GetWindows()
-		//~ if windows != nil {
-		//~ windows.Foreach( func(e interface{}) {
-		//~ if w,ok := e.(*gtk.Window);ok {
-		//~ if w.InDestruction() == false {
-		//~ w.Destroy()
-		//~ }
-		//~ }
-		//~ })
-		//~ }
+		// このハンドラが呼ばれる時は、すでにウィジェットの破棄が始まっているので
+		// 不用意に参照するとエラー（異常終了）が発生する。
 		fmt.Println("shutdown.")
 	})
 
