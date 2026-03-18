@@ -114,11 +114,11 @@ func digitClockNew() *digitClock {
 
 // GetValue 設定時刻を返す。戻り値のフォーマットはtime.TimeOnlyで秒は常に00が返る。
 func (dc *digitClock) GetValue() string {
-	return fmt.Sprintf("%1d%1d:%1d%1d:00",
-		dc.hh.GetValue,
-		dc.hl.GetValue,
-		dc.mh.GetValue,
-		dc.ml.GetValue)
+	return fmt.Sprintf("%01d%01d:%01d%01d:00",
+		dc.hh.GetValue(),
+		dc.hl.GetValue(),
+		dc.mh.GetValue(),
+		dc.ml.GetValue())
 }
 
 // SetValue 時刻を設定する。t はtime.TimeOnlyで、秒は無視される。

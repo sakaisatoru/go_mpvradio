@@ -54,7 +54,10 @@ var (
 	mpvret                = make(chan string)
 	mu                    sync.Mutex
 	last_selected_station string = ""
+	last_selected_url     string = ""
 	tabletmode            bool
+	alarmtime             string
+	alarmflag             bool
 )
 
 func about_activated(action *glib.SimpleAction) {
@@ -77,7 +80,7 @@ func about_activated(action *glib.SimpleAction) {
 	}
 }
 
-// mpvからの応答を選別するフィルタ
+// cb_mpvrecv mpvからの応答を選別するフィルタ
 func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -97,7 +100,9 @@ func tune(url string) {
 		station_url string
 		err         error = nil
 	)
-
+	if url == "" {
+		return
+	}
 	args := strings.Split(url, "/")
 	if args[0] == "plugin:" {
 		switch args[1] {
@@ -122,11 +127,10 @@ func tune(url string) {
 	//~ fmt.Println(station_url)
 	err = mpvctl.Send(s)
 	radio_enable = true
+	return
 }
 
-/*
- * playlist の検索を行う
- */
+// getplaylists playlist の検索を行う
 func getplaylists() ([]string, error) {
 	var (
 		files []string
@@ -151,13 +155,11 @@ func getplaylists() ([]string, error) {
 	return files, err
 }
 
-/*
- * gotk3 にラッパーがないので go で書いた g_action_map_add_action_entries()
- * https://github.com/GNOME/glib/blob/main/gio/gactionmap.c
- *
- * goのコールバックは引数を取らないので、parameterは扱えない。
- */
+// action_map_add_action_entries go で書いた g_action_map_add_action_entries()
 func action_map_add_action_entries(app *gtk.Application, entries []actionEntry) {
+
+	// https://github.com/GNOME/glib/blob/main/gio/gactionmap.c
+	// goのコールバックは引数を取らないので、parameterは扱えない。
 	var (
 		action         *glib.SimpleAction
 		parameter_type *glib.VariantType
@@ -197,9 +199,7 @@ func action_map_add_action_entries(app *gtk.Application, entries []actionEntry) 
 	}
 }
 
-/*
- * gotk3 にラッパーが無いので go で書いた gtk_container_foreach ()
- */
+// container_foreach go で書いた gtk_container_foreach ()
 func container_foreach(container *gtk.Container, cb func(wi *gtk.Widget)) {
 	list := container.GetChildren()
 	current := list
@@ -248,9 +248,9 @@ func radiopanel_new(playlistfile string) (*radioPanel, error) {
 									// 大域変数を使う
 									if st != last_selected_station {
 										mpvheaderbar.SetSubtitle(st) //
-										u, _ := panel.store[st]
+										last_selected_url, _ = panel.store[st]
 										last_selected_station = st
-										tune(u)
+										tune(last_selected_url)
 									}
 								}
 							})
@@ -417,6 +417,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		btn_tune, _ := gtk.ButtonNewWithLabel("Tune Now")
 		btn_tune.Connect("clicked", func() {
 			if url, err := entrybuffer.GetText(); err == nil {
+				last_selected_url = url
 				tune(url)
 				inputarea.Hide()
 			}
@@ -435,8 +436,10 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		}
 
 		// アラームセット
+		alarmtime = "00:00:00" // todo:設定ファイルから拾う
+		alarmflag = false
 		digitAlarm := digitClockNew()
-		digitAlarm.SetValue(time.Now().Format(time.TimeOnly))
+		digitAlarm.SetValue(alarmtime)
 		revealer, _ := gtk.RevealerNew()
 		revealer.Add(digitAlarm)
 		revealer.SetTransitionType(gtk.REVEALER_TRANSITION_TYPE_SLIDE_DOWN)
@@ -444,12 +447,28 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		revealer.SetRevealChild(false)
 		boxtmp, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 		boxtmp.PackStart(revealer, true, false, 0)
-		btnSetAlarm, _ := gtk.ButtonNewWithLabel("Alarm")
+		//~ btnSetAlarm, _ := gtk.ButtonNewWithLabel("Alarm")
+		alarmLabel, _ := gtk.LabelNew("00:00")
+		btnSetAlarm, _ := gtk.ButtonNewFromIconName("clock-symbolic", gtk.ICON_SIZE_MENU)
 		btnSetAlarm.Connect("clicked", func(b *gtk.Button) {
-			f := revealer.GetChildRevealed()
-			revealer.SetRevealChild(!f)
+			if alarmflag {
+				alarmflag = false
+				alarmLabel.Hide()
+				revealer.SetRevealChild(false)
+			} else {
+				if revealer.GetChildRevealed() {
+					alarmflag = true
+					alarmtime = digitAlarm.GetValue()
+					alarmLabel.SetText(alarmtime[:5])
+					alarmLabel.Show()
+					revealer.SetRevealChild(false)
+				} else {
+					revealer.SetRevealChild(true)
+				}
+			}
 		})
 		mpvheaderbar.PackStart(btnSetAlarm)
+		mpvheaderbar.PackStart(alarmLabel)
 
 		if tabletmode {
 			// タブレット向けレイアウト
@@ -493,7 +512,11 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		}
 		win.Add(box)
 		win.SetDefaultSize(800, 600)
-		win.Connect("show", func() { inputarea.Hide() })
+		win.Connect("show", func() {
+			// 起動時に非表示にしたいもの
+			inputarea.Hide()
+			alarmLabel.Hide()
+		})
 	}
 	return win, err
 }
@@ -575,6 +598,17 @@ func main() {
 			app.SetAppMenu(m)
 		}
 
+		// alarm 処理  ３秒毎にフラグをチェックする
+		glib.TimeoutAdd(3000, func() bool {
+			if alarmflag {
+				t := time.Now().Format(time.TimeOnly)[:5]
+				if t == alarmtime[:5] {
+					tune(last_selected_url)
+					alarmflag = false
+				}
+			}
+			return true
+		})
 		fmt.Println("Start up.")
 	})
 

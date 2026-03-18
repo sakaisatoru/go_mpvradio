@@ -109,7 +109,6 @@ func Send(s string) error {
 	return err
 }
 
-//~ func Recv(ch chan<- string, cb func(MpvIRC) (string, bool)) {
 func Recv(cb func(MpvIRC) (string, bool)) {
 	var ms MpvIRC
 	
