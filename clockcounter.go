@@ -18,8 +18,8 @@ type digitWheel struct {
 
 func digitWheelNew() *digitWheel {
 	v, _ := gtk.LabelNew("")
-	u, _ := gtk.ButtonNewFromIconName("go-up-symbolic", 24)
-	d, _ := gtk.ButtonNewFromIconName("go-down-symbolic", 24)
+	u, _ := gtk.ButtonNewFromIconName("go-up-symbolic", gtk.ICON_SIZE_LARGE_TOOLBAR)
+	d, _ := gtk.ButtonNewFromIconName("go-down-symbolic", gtk.ICON_SIZE_LARGE_TOOLBAR)
 	b, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	w := &digitWheel{
 		Box:    b,

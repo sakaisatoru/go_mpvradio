@@ -10,6 +10,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 	"local.packages/mpvctl"
 	"local.packages/netradio"
+	"local.packages/preferences"
 	"log"
 	"os"
 	"path"
@@ -30,6 +31,7 @@ const (
 	ICON_DIR_PATH   string = "mpvradio/logo"
 	APP_ICON        string = "pixmaps/mpvradio.png"
 	PLAYLISTS       string = "mpvradio/playlists/*.m3u"
+	CONFIG_FILE     string = "go_mpvradio.conf"
 )
 
 type actionEntry struct {
@@ -58,6 +60,7 @@ var (
 	tabletmode            bool
 	alarmtime             string
 	alarmflag             bool
+	mpvradioPreferences   *preferences.PreferencesFile
 )
 
 func about_activated(action *glib.SimpleAction) {
@@ -370,7 +373,6 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		menubutton.SetMenuModel(mm)
 		menubutton.SetImage(image)
 		mpvheaderbar.PackStart(menubutton)
-		//~ mpvheaderbar.SetDecorationLayout("menu:close")
 		mpvheaderbar.SetShowCloseButton(true) // ウィンドウマネージャの設定に従う
 		mpvheaderbar.SetTitle(PACKAGE)
 		mpvheaderbar.SetHasSubtitle(true)
@@ -436,7 +438,10 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		}
 
 		// アラームセット
-		alarmtime = "00:00:00" // todo:設定ファイルから拾う
+		alarmtime, err = mpvradioPreferences.GetString("others", "alarmtime")
+		if err != nil {
+			alarmtime = "00:00:00"
+		}
 		alarmflag = false
 		digitAlarm := digitClockNew()
 		digitAlarm.SetValue(alarmtime)
@@ -447,7 +452,6 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		revealer.SetRevealChild(false)
 		boxtmp, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 		boxtmp.PackStart(revealer, true, false, 0)
-		//~ btnSetAlarm, _ := gtk.ButtonNewWithLabel("Alarm")
 		alarmLabel, _ := gtk.LabelNew("00:00")
 		btnSetAlarm, _ := gtk.ButtonNewFromIconName("clock-symbolic", gtk.ICON_SIZE_MENU)
 		btnSetAlarm.Connect("clicked", func(b *gtk.Button) {
@@ -461,6 +465,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 					alarmtime = digitAlarm.GetValue()
 					alarmLabel.SetText(alarmtime[:5])
 					alarmLabel.Show()
+					mpvradioPreferences.Set("others", "alarmtime", alarmtime)
 					revealer.SetRevealChild(false)
 				} else {
 					revealer.SetRevealChild(true)
@@ -511,11 +516,37 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			box.PackStart(box2, true, true, 0)
 		}
 		win.Add(box)
-		win.SetDefaultSize(800, 600)
+		width, err := mpvradioPreferences.GetInt("window", "width")
+		if err != nil {
+			width = 800
+		}
+		height, err := mpvradioPreferences.GetInt("window", "height")
+		if err != nil {
+			height = 600
+		}
+		win.SetDefaultSize(width, height)
 		win.Connect("show", func() {
 			// 起動時に非表示にしたいもの
 			inputarea.Hide()
 			alarmLabel.Hide()
+		})
+		win.Connect("delete-event", func(w *gtk.ApplicationWindow, e *gdk.Event) {
+			// destroy では取得できない
+			mpvradioPreferences.Set("window", "width", win.GetAllocatedWidth())
+			mpvradioPreferences.Set("window", "height", win.GetAllocatedHeight())
+		})
+
+		// alarm 処理  ３秒毎にフラグをチェックする
+		glib.TimeoutAdd(3000, func() bool {
+			if alarmflag {
+				t := time.Now().Format(time.TimeOnly)[:5]
+				if t == alarmtime[:5] {
+					tune(last_selected_url)
+					alarmflag = false
+					alarmLabel.Hide()
+				}
+			}
+			return true
 		})
 	}
 	return win, err
@@ -540,6 +571,12 @@ func main() {
 	})
 
 	app.Connect("startup", func() {
+		mpvradioPreferences = preferences.PreferencesFileNew("mpvradio", "mpvradio.conf")
+		if err := mpvradioPreferences.Load(); err != nil {
+			fmt.Println(err)
+		}
+		mpvradioPreferences.Dump()
+
 		if err := mpvctl.Init(MPV_SOCKET_PATH); err != nil {
 			fmt.Println(err) // mpv の起動に失敗した
 			app.Quit()
@@ -598,25 +635,16 @@ func main() {
 			app.SetAppMenu(m)
 		}
 
-		// alarm 処理  ３秒毎にフラグをチェックする
-		glib.TimeoutAdd(3000, func() bool {
-			if alarmflag {
-				t := time.Now().Format(time.TimeOnly)[:5]
-				if t == alarmtime[:5] {
-					tune(last_selected_url)
-					alarmflag = false
-				}
-			}
-			return true
-		})
 		fmt.Println("Start up.")
 	})
 
 	app.Connect("shutdown", func() {
 		mpvctl.Close()
 		mpvctl.Mpvkill()
-		err := os.Remove(MPV_SOCKET_PATH)
-		if err != nil {
+		if err := os.Remove(MPV_SOCKET_PATH); err != nil {
+			fmt.Println(err)
+		}
+		if err := mpvradioPreferences.Save(); err != nil {
 			fmt.Println(err)
 		}
 		// このハンドラが呼ばれる時は、すでにウィジェットの破棄が始まっているので
