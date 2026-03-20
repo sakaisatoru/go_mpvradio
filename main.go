@@ -553,6 +553,8 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 }
 
 func main() {
+	mpvradioPreferences = preferences.PreferencesFileNew(PACKAGE, CONFIG_FILE)
+
 	app, err := gtk.ApplicationNew(appID, glib.APPLICATION_HANDLES_COMMAND_LINE)
 	if err != nil {
 		log.Fatal(err)
@@ -571,11 +573,10 @@ func main() {
 	})
 
 	app.Connect("startup", func() {
-		mpvradioPreferences = preferences.PreferencesFileNew("mpvradio", "mpvradio.conf")
 		if err := mpvradioPreferences.Load(); err != nil {
 			fmt.Println(err)
 		}
-		mpvradioPreferences.Dump()
+		//~ mpvradioPreferences.Dump()
 
 		if err := mpvctl.Init(MPV_SOCKET_PATH); err != nil {
 			fmt.Println(err) // mpv の起動に失敗した
