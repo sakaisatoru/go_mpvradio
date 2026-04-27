@@ -52,7 +52,7 @@ var (
 	radio_enable          bool
 	volume                int8
 	mpvheaderbar          *gtk.HeaderBar
-	inputarea             *gtk.Box
+	inputarea             *gtk.Revealer
 	mpvret                = make(chan string)
 	mu                    sync.Mutex
 	last_selected_station string = ""
@@ -408,7 +408,13 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		}
 
 		// input area
-		inputarea, err = gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 3)
+		inputarea, err = gtk.RevealerNew()
+		if err != nil {
+			return win, err
+		}
+		inputarea.SetTransitionType(gtk.REVEALER_TRANSITION_TYPE_SLIDE_DOWN)
+		inputarea.SetTransitionDuration(250)
+		inputareaBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 3)
 		if err != nil {
 			return win, err
 		}
@@ -421,22 +427,25 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			if url, err := entrybuffer.GetText(); err == nil {
 				last_selected_url = url
 				tune(url)
-				inputarea.Hide()
+				inputarea.SetRevealChild(false)
 			}
 		})
 		btn_cancel, _ := gtk.ButtonNewWithLabel("Cancel")
-		btn_cancel.Connect("clicked", (*gtk.Widget)(unsafe.Pointer(inputarea)).Hide)
+		btn_cancel.Connect("clicked", func(widget any) {
+			inputarea.SetRevealChild(false)
+		})
 		entry, _ := gtk.EntryNewWithBuffer(entrybuffer)
 		entry.SetPlaceholderText("ここにURLを入力してください")
-		inputarea.PackStart(entry, true, true, 0)
-		inputarea.PackEnd(btn_cancel, false, false, 0)
-		inputarea.PackEnd(btn_tune, false, false, 0)
+		inputareaBox.PackStart(entry, true, true, 0)
+		inputareaBox.PackEnd(btn_cancel, false, false, 0)
+		inputareaBox.PackEnd(btn_tune, false, false, 0)
+		inputarea.Add(inputareaBox)
+		inputarea.SetRevealChild(false)
 
 		box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
 		if err != nil {
 			return win, err
 		}
-
 		// アラームセット
 		alarmtime, err = mpvradioPreferences.GetString("others", "alarmtime")
 		if err != nil {
@@ -448,7 +457,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		revealer, _ := gtk.RevealerNew()
 		revealer.Add(digitAlarm)
 		revealer.SetTransitionType(gtk.REVEALER_TRANSITION_TYPE_SLIDE_DOWN)
-		revealer.SetTransitionDuration(300)
+		revealer.SetTransitionDuration(250)
 		revealer.SetRevealChild(false)
 		boxtmp, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 		boxtmp.PackStart(revealer, true, false, 0)
@@ -472,6 +481,11 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 				}
 			}
 		})
+		btnQuickTuneRevealer, _ := gtk.ButtonNewFromIconName("document-edit", gtk.ICON_SIZE_MENU)
+		btnQuickTuneRevealer.Connect("clicked", func(b *gtk.Button) {
+			inputarea.SetRevealChild(!inputarea.GetRevealChild())
+		})
+		mpvheaderbar.PackStart(btnQuickTuneRevealer)
 		mpvheaderbar.PackStart(btnSetAlarm)
 		mpvheaderbar.PackStart(alarmLabel)
 
@@ -527,7 +541,6 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		win.SetDefaultSize(width, height)
 		win.Connect("show", func() {
 			// 起動時に非表示にしたいもの
-			inputarea.Hide()
 			alarmLabel.Hide()
 		})
 		win.Connect("delete-event", func(w *gtk.ApplicationWindow, e *gdk.Event) {
@@ -615,11 +628,7 @@ func main() {
 		}
 		app_entries := []actionEntry{
 			{"quicktune", func(action *glib.SimpleAction) {
-				if inputarea.GetVisible() == true {
-					inputarea.Hide()
-				} else {
-					inputarea.Show()
-				}
+				inputarea.SetRevealChild(!inputarea.GetRevealChild())
 			}, "", "", nil},
 			{"about", about_activated, "", "", nil},
 			{"quit", func(action *glib.SimpleAction) { app.Quit() }, "", "", nil},
