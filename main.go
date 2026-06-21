@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+	//~ "os/exec"
 )
 
 const (
@@ -53,6 +54,8 @@ var (
 	volume                int8
 	mpvheaderbar          *gtk.HeaderBar
 	inputarea             *gtk.Revealer
+	infobar				  *gtk.InfoBar
+	errormessagelabel	  *gtk.Label
 	mpvret                = make(chan string)
 	mu                    sync.Mutex
 	last_selected_station string = ""
@@ -88,6 +91,7 @@ func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	if radio_enable {
+		fmt.Printf("\nid:%d  error:%s  data:%s  event:%s  name:%s", ms.Request_id, ms.Err, ms.Data, ms.Event, ms.Name)
 		if ms.Event == "property-change" {
 			if ms.Name == "metadata/by-key/icy-title" {
 				mpvheaderbar.SetSubtitle(ms.Data)
@@ -102,6 +106,7 @@ func tune(url string) {
 	var (
 		station_url string
 		err         error = nil
+		radiko      *netradio.RadikoURL
 	)
 	if url == "" {
 		return
@@ -110,24 +115,46 @@ func tune(url string) {
 	if args[0] == "plugin:" {
 		switch args[1] {
 		case "afn.py":
-			station_url, err = netradio.AFN_get_url_with_api(args[2])
+			station_url, err = netradio.AFNGetUrlWithApi(args[2])
 		case "radiko.py":
-			station_url, err = netradio.Radiko_get_url(args[2])
+			radiko, err = netradio.RadikoGetUrl(args[2])
+			if err != nil {
+				mpvradio_show_error(err.Error())
+				return
+			}
+			fmt.Println("main.go   : ", radiko.Token, radiko.UserAgent)
+			mpvctl.Stop()
+			s := fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"User-Agent: %s, X-Radiko-AuthToken: %s, Origin: https://radiko.jp, Referer: https://radiko.jp/, Connection: keep-alive\"], \"request_id\": 100}\x0a", radiko.UserAgent, radiko.Token)
+			//~ mpvctl.Send(s)
+			s = s + fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 101}\x0a", radiko.M3u8Url)
+			//~ rv:=exec.Command("/usr/bin/mpv", "-v", "--http-header-fields=User-Agent: "+radiko.UserAgent+" X-Radiko-AuthToken: "+radiko.Token,
+							//~ radiko.M3u8Url)
+			//~ err = rv.Start()
+			//~ if err != nil {
+				//~ mpvradio_show_error(err.Error())
+				//~ return
+			//~ }
+			//~ mpvctl.Send(s)
+			radio_enable = true
+			return
+
 		default:
 			break
 		}
 		if err != nil {
+			mpvradio_show_error(err.Error())
 			return
 		}
 	} else {
 		station_url = url
 	}
 
-	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", "/usr/local/share/mpvradio/sounds/button57.mp3")
+	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 123}\x0a", "/usr/local/share/mpvradio/sounds/button57.mp3")
 	err = mpvctl.Send(s)
 	time.Sleep(300 * time.Millisecond)
-	s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
-	//~ fmt.Println(station_url)
+	if args[1] != "radiko.py" {
+		s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
+	}
 	err = mpvctl.Send(s)
 	radio_enable = true
 	return
@@ -337,6 +364,14 @@ func (panel radioPanel) readPlayList(listfile string) error {
 	return nil
 }
 
+func mpvradio_show_error(mes string) {
+	fmt.Println(mes)
+	errormessagelabel.SetText(mes)
+	infobar.SetMessageType(gtk.MESSAGE_ERROR)
+	errormessagelabel.Show()
+	infobar.Show()
+}
+
 func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 	// build gui
 	win, err := gtk.ApplicationWindowNew(app)
@@ -489,6 +524,16 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		mpvheaderbar.PackStart(btnSetAlarm)
 		mpvheaderbar.PackStart(alarmLabel)
 
+		// エラー表示
+		infobar, _ = gtk.InfoBarNew()
+		infobar.SetShowCloseButton(true)
+		infobar.Connect("response", func(b *gtk.InfoBar) {
+			b.Hide()
+		})
+		ctxarea, err := infobar.GetContentArea()
+		errormessagelabel, _ = gtk.LabelNew("")
+		ctxarea.PackStart(errormessagelabel,true,true,0)
+
 		if tabletmode {
 			// タブレット向けレイアウト
 			box2, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
@@ -510,6 +555,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			box2.PackStart(notebook, true, true, 0)
 			box.PackStart(boxtmp, false, true, 0)
 			box.PackStart(inputarea, false, true, 0)
+			box.PackStart(infobar, false, true, 0)
 			box.PackStart(box2, true, true, 0)
 		} else {
 			// デスクトップ向けレイアウト
@@ -527,6 +573,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 			box2.PackStart(notebook, true, true, 0)
 			box.PackStart(boxtmp, false, true, 0)
 			box.PackStart(inputarea, false, true, 0)
+			box.PackStart(infobar, false, true, 0)
 			box.PackStart(box2, true, true, 0)
 		}
 		win.Add(box)
@@ -677,6 +724,7 @@ func main() {
 			s := "{ \"command\": [\"observe_property_string\", 1, \"metadata/by-key/icy-title\"] }"
 			mpvctl.Send(s)
 			w.ShowAll()
+			infobar.Hide()
 			if tabletmode {
 				w.Maximize()
 			}
