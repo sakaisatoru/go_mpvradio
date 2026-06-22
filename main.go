@@ -122,19 +122,23 @@ func tune(url string) {
 				mpvradio_show_error(err.Error())
 				return
 			}
-			fmt.Println("main.go   : ", radiko.Token, radiko.UserAgent)
 			mpvctl.Stop()
-			s := fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"User-Agent: %s, X-Radiko-AuthToken: %s, Origin: https://radiko.jp, Referer: https://radiko.jp/, Connection: keep-alive\"], \"request_id\": 100}\x0a", radiko.UserAgent, radiko.Token)
+			s := fmt.Sprintf("{\"command\": [\"set_property\", \"user-agent\", \"%s\"], \"request_id\": 100}\x0a", radiko.UserAgent)
+			//~ s = s + fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"X-Radiko-AuthToken: %s, Origin: https://radiko.jp, Referer: https://radiko.jp/, Connection: keep-alive\"], \"request_id\": 100}\x0a", radiko.UserAgent, radiko.Token)
+			s = s + "{\"command\": [\"set_property\", \"ytdl\", \"no\"], \"request_id\": 103}\x0a"
+			s = s + fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"X-Radiko-AuthToken: %s\"], \"request_id\": 101}\x0a", radiko.Token)
 			//~ mpvctl.Send(s)
-			s = s + fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 101}\x0a", radiko.M3u8Url)
-			//~ rv:=exec.Command("/usr/bin/mpv", "-v", "--http-header-fields=User-Agent: "+radiko.UserAgent+" X-Radiko-AuthToken: "+radiko.Token,
-							//~ radiko.M3u8Url)
+			s = s + fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 102}\x0a", radiko.M3u8Url)
+			//~ fmt.Println("/usr/bin/mpv -v --user-agent=\""+radiko.UserAgent+"\" --http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\" --no-ytdl \""+radiko.M3u8Url+"\"")
+			//~ rv:=exec.Command("/usr/bin/mpv -v --user-agent=\""+radiko.UserAgent+"\" --http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\" --no-ytdl \""+radiko.M3u8Url+"\"")
+			//~ rv:=exec.Command("/usr/bin/mpv", "-v", "--user-agent=\""+radiko.UserAgent+"\"", "--http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\"", "--no-ytdl",
+							//~ "\""+radiko.M3u8Url+"\"")
 			//~ err = rv.Start()
 			//~ if err != nil {
 				//~ mpvradio_show_error(err.Error())
 				//~ return
 			//~ }
-			//~ mpvctl.Send(s)
+			mpvctl.Send(s)
 			radio_enable = true
 			return
 
@@ -532,6 +536,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		})
 		ctxarea, err := infobar.GetContentArea()
 		errormessagelabel, _ = gtk.LabelNew("")
+		errormessagelabel.Set("wrap", true)
 		ctxarea.PackStart(errormessagelabel,true,true,0)
 
 		if tabletmode {

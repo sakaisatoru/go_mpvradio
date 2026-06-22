@@ -138,9 +138,10 @@ func RadikoGetUrl(station string) (*RadikoURL, error) {
 				//~ CopyHeaders(h11).
 				//~ ToString(&sss).
 				//~ Fetch(context.Background())
+			//~ fmt.Println(sss)
 			//~ pos := strings.Index(sss, "https://")
 			//~ radikoURL.M3u8Url = strings.TrimRight(sss[pos:],"\n")
-			fmt.Println(radikoURL.M3u8Url)
+			//~ fmt.Println(radikoURL.M3u8Url)
 		//
 
 			break
@@ -149,6 +150,6 @@ func RadikoGetUrl(station string) (*RadikoURL, error) {
 
 	radikoURL.Token = authtoken
 	radikoURL.UserAgent = useragent
-fmt.Println("radiko.go : ", radikoURL.Token, radikoURL.UserAgent)
+fmt.Println("radiko.go : ", radikoURL.M3u8Url, radikoURL.Token, radikoURL.UserAgent)
 	return &radikoURL, err
 }
