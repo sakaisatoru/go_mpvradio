@@ -64,9 +64,7 @@ func RadikoProxyNew() *RadikoProxy {
 }
 
 func (sv *RadikoProxy) SetStationInfo(v *RadikoURL) {
-	sv.Svr.M3u8Url = v.M3u8Url
-	sv.Svr.Token = v.Token
-	sv.Svr.UserAgent = v.UserAgent
+	sv.Svr = *v
 }
 
 func (sv *RadikoProxy) GetProxyAddress() string {

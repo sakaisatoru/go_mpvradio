@@ -1,4 +1,5 @@
 /go_mpvradio
 /main
+*.bak
 
 go_mpvradio.geany

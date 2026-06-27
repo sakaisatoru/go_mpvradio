@@ -1,7 +1,7 @@
-module com.google.endeavor2wako/netradio
+module github.com/sakaisatoru/go_mpvradio/netradio
 
-go 1.22.1
+go 1.25.5
 
-require github.com/carlmjohnson/requests v0.23.5
+require github.com/carlmjohnson/requests v0.25.1
 
-require golang.org/x/net v0.15.0 // indirect
+require golang.org/x/net v0.38.0 // indirect
