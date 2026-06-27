@@ -13,6 +13,7 @@ import (
 	"local.packages/preferences"
 	"log"
 	"os"
+	//~ "os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-	//~ "os/exec"
+	//~ "bytes"
 )
 
 const (
@@ -54,8 +55,8 @@ var (
 	volume                int8
 	mpvheaderbar          *gtk.HeaderBar
 	inputarea             *gtk.Revealer
-	infobar				  *gtk.InfoBar
-	errormessagelabel	  *gtk.Label
+	infobar               *gtk.InfoBar
+	errormessagelabel     *gtk.Label
 	mpvret                = make(chan string)
 	mu                    sync.Mutex
 	last_selected_station string = ""
@@ -64,6 +65,8 @@ var (
 	alarmtime             string
 	alarmflag             bool
 	mpvradioPreferences   *preferences.PreferencesFile
+
+	radikoproxy *netradio.RadikoProxy
 )
 
 func about_activated(action *glib.SimpleAction) {
@@ -91,7 +94,7 @@ func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	if radio_enable {
-		fmt.Printf("\nid:%d  error:%s  data:%s  event:%s  name:%s", ms.Request_id, ms.Err, ms.Data, ms.Event, ms.Name)
+		//~ fmt.Printf("\nid:%d  error:%s  data:%s  event:%s  name:%s", ms.Request_id, ms.Err, ms.Data, ms.Event, ms.Name)
 		if ms.Event == "property-change" {
 			if ms.Name == "metadata/by-key/icy-title" {
 				mpvheaderbar.SetSubtitle(ms.Data)
@@ -103,64 +106,47 @@ func cb_mpvrecv(ms mpvctl.MpvIRC) (string, bool) {
 }
 
 func tune(url string) {
-	var (
-		station_url string
-		err         error = nil
-		radiko      *netradio.RadikoURL
-	)
 	if url == "" {
 		return
 	}
+
 	args := strings.Split(url, "/")
 	if args[0] == "plugin:" {
 		switch args[1] {
 		case "afn.py":
-			station_url, err = netradio.AFNGetUrlWithApi(args[2])
-		case "radiko.py":
-			radiko, err = netradio.RadikoGetUrl(args[2])
+			u, err := netradio.AFNGetUrlWithApi(args[2])
 			if err != nil {
 				mpvradio_show_error(err.Error())
 				return
 			}
-			mpvctl.Stop()
-			s := fmt.Sprintf("{\"command\": [\"set_property\", \"user-agent\", \"%s\"], \"request_id\": 100}\x0a", radiko.UserAgent)
-			//~ s = s + fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"X-Radiko-AuthToken: %s, Origin: https://radiko.jp, Referer: https://radiko.jp/, Connection: keep-alive\"], \"request_id\": 100}\x0a", radiko.UserAgent, radiko.Token)
-			s = s + "{\"command\": [\"set_property\", \"ytdl\", \"no\"], \"request_id\": 103}\x0a"
-			s = s + fmt.Sprintf("{\"command\": [\"set_property\", \"http-header-fields\", \"X-Radiko-AuthToken: %s\"], \"request_id\": 101}\x0a", radiko.Token)
-			//~ mpvctl.Send(s)
-			s = s + fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 102}\x0a", radiko.M3u8Url)
-			//~ fmt.Println("/usr/bin/mpv -v --user-agent=\""+radiko.UserAgent+"\" --http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\" --no-ytdl \""+radiko.M3u8Url+"\"")
-			//~ rv:=exec.Command("/usr/bin/mpv -v --user-agent=\""+radiko.UserAgent+"\" --http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\" --no-ytdl \""+radiko.M3u8Url+"\"")
-			//~ rv:=exec.Command("/usr/bin/mpv", "-v", "--user-agent=\""+radiko.UserAgent+"\"", "--http-header-fields=\"X-Radiko-AuthToken: "+radiko.Token+"\"", "--no-ytdl",
-							//~ "\""+radiko.M3u8Url+"\"")
-			//~ err = rv.Start()
-			//~ if err != nil {
-				//~ mpvradio_show_error(err.Error())
-				//~ return
-			//~ }
-			mpvctl.Send(s)
-			radio_enable = true
-			return
+			url = u
+
+		case "radiko.py":
+			radiko, err := netradio.RadikoGetUrl(args[2])
+			if err != nil {
+				mpvradio_show_error(err.Error())
+				return
+			}
+
+			radikoproxy.SetStationInfo(radiko)
+			if radikoproxy.IsStop() {
+				radikoproxy.Start()
+			}
+			url = radikoproxy.GetProxyAddress()
 
 		default:
 			break
 		}
-		if err != nil {
-			mpvradio_show_error(err.Error())
-			return
-		}
-	} else {
-		station_url = url
 	}
 
-	s := fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 123}\x0a", "/usr/local/share/mpvradio/sounds/button57.mp3")
-	err = mpvctl.Send(s)
+	mpvctl.Send(
+		fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"], \"request_id\": 123}\x0a",
+			"/usr/local/share/mpvradio/sounds/button57.mp3"))
 	time.Sleep(300 * time.Millisecond)
-	if args[1] != "radiko.py" {
-		s = fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", station_url)
-	}
-	err = mpvctl.Send(s)
+
+	mpvctl.Send(fmt.Sprintf("{\"command\": [\"loadfile\",\"%s\"]}\x0a", url))
 	radio_enable = true
+	//~ fmt.Println(url)
 	return
 }
 
@@ -537,7 +523,7 @@ func mpvradio_window_new(app *gtk.Application) (*gtk.ApplicationWindow, error) {
 		ctxarea, err := infobar.GetContentArea()
 		errormessagelabel, _ = gtk.LabelNew("")
 		errormessagelabel.Set("wrap", true)
-		ctxarea.PackStart(errormessagelabel,true,true,0)
+		ctxarea.PackStart(errormessagelabel, true, true, 0)
 
 		if tabletmode {
 			// タブレット向けレイアウト
@@ -697,6 +683,7 @@ func main() {
 			app.SetAppMenu(m)
 		}
 
+		radikoproxy = netradio.RadikoProxyNew()
 		fmt.Println("Start up.")
 	})
 
