@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/carlmjohnson/requests v0.23.5 // indirect
-	golang.org/x/net v0.15.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	github.com/carlmjohnson/requests v0.25.1 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )
