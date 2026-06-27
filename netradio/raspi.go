@@ -11,12 +11,14 @@ type StationInfo struct {
 	Url  string
 }
 
+// PrepareStationList 局情報を読み込んでスライスへのポインタを返す
 func PrepareStationList(st string) ([]*StationInfo, error) {
 	var (
 		file   *os.File
 		err    error
 		stlist []*StationInfo
 	)
+	
 	file, err = os.Open(st)
 	if err != nil {
 		return nil, err
@@ -49,7 +51,7 @@ func PrepareStationList(st string) ([]*StationInfo, error) {
 			stmp.Url = s
 			if f {
 				f = false
-				// UTF-8 対応で rune　で数える
+				// UTF-8 対応で rune で数える
 				stmp.Name = string([]rune(name + "                ")[:16])
 			} else {
 				stmp.Name = ""
@@ -60,14 +62,15 @@ func PrepareStationList(st string) ([]*StationInfo, error) {
 	return stlist, err
 }
 
-func Radiko_setup(stlist []*StationInfo) {
-	for _, st := range stlist {
-		args := strings.Split(st.Url, "/")
-		if args[0] == "plugin:" {
-			if args[1] == "radiko.py" {
-				_, _ = Radiko_get_url(args[2])
-				break
-			}
-		}
-	}
-}
+// Radiko_setup 接続先URLを取得する
+//~ func Radiko_setup(stlist []*StationInfo) {
+	//~ for _, st := range stlist {
+		//~ args := strings.Split(st.Url, "/")
+		//~ if args[0] == "plugin:" {
+			//~ if args[1] == "radiko.py" {
+				//~ _, _ = RadikoGetUrl(args[2])
+				//~ break
+			//~ }
+		//~ }
+	//~ }
+//~ }
